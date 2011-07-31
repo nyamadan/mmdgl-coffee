@@ -1,0 +1,1 @@
+window.MMD_GL = {} if not window.MMD_GL?
