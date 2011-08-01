@@ -1,5 +1,5 @@
 class MMD_GL.Binary
-  constructor: (@blob) ->
+  constructor: (@binStr) ->
     @pos = 0
   
   read: (type, elemSize, length) ->
@@ -8,10 +8,9 @@ class MMD_GL.Binary
 
     byteBuffer = new Uint8Array buffer, 0, bufSize
 
-    c = @blob[@pos]
-    i = 0
-    byteBuffer[i++] = (@blob.charCodeAt @pos++) & 0xff while i < bufSize
-    return new type buffer, 0, bufSize
+    c = @binStr[@pos]
+    byteBuffer[i] = (@binStr.charCodeAt @pos++) & 0xff for i in [0...bufSize]
+    new type buffer, 0, length
 
   readUint8: (length) ->
     @read Uint8Array, 1, length
@@ -35,4 +34,4 @@ class MMD_GL.Binary
     @read Float32Array, 4, length
 
   readFloat64: (length) ->
-    @read Float64Array, 4, length
+    @read Float64Array, 8, length

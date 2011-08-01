@@ -1,1 +1,3 @@
-window.MMD_GL = {} if not window.MMD_GL?
+window.MMD_GL ?= {}
+
+MMD_GL.debug = true
