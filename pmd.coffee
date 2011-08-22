@@ -25,7 +25,7 @@ class MMD_GL.PMD
     vertNum = (bin.readUint32 1)[0]
 
     # allocate vertices
-    @position = new Float32Array vertNum * 3
+    @positions = new Float32Array vertNum * 3
     @normals = new Float32Array vertNum * 3
     @coord0s = new Float32Array vertNum * 2
     @bone0s = new Uint16Array vertNum
@@ -35,9 +35,9 @@ class MMD_GL.PMD
 
     # read vertices
     for i in [0...vertNum]
-      @position[i * 3 + 0] = (bin.readFloat32 1)[0]
-      @position[i * 3 + 1] = (bin.readFloat32 1)[0]
-      @position[i * 3 + 2] = (-bin.readFloat32 1)[0]
+      @positions[i * 3 + 0] = (bin.readFloat32 1)[0]
+      @positions[i * 3 + 1] = (bin.readFloat32 1)[0]
+      @positions[i * 3 + 2] = (-bin.readFloat32 1)[0]
 
       @normals[i * 3 + 0] = (bin.readFloat32 1)[0]
       @normals[i * 3 + 1] = (bin.readFloat32 1)[0]
@@ -102,3 +102,42 @@ class MMD_GL.PMD
       for j in [0...materialIndexNum]
         @indices[i][j] = indices[offset + j]
       offset += materialIndexNum
+
+  createMesh: ->
+    program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['toon0'], MMD_GL.fragmentShaderScript['toon0']
+    throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
+    
+    model_array = new Array @materials.length
+    model_array.bone0s = @bone0s
+    model_array.bone1s = @bone1s
+
+    position    = new tdl.primitives.AttribBuffer 3, 0
+    normal      = new tdl.primitives.AttribBuffer 3, 0
+    coord0      = new tdl.primitives.AttribBuffer 2, 0
+
+    position.buffer = @positions
+    position.cursor = parseInt @positions.length / 3, 10
+    position.numComponents = 3
+    position.numElements = parseInt @positions.length / 3, 10
+    position.type = 'Float32Array'
+
+    normal.buffer = @normals
+    normal.cursor = parseInt @normals.length / 3, 10
+    normal.numComponents = 3
+    normal.numElements = parseInt @normals.length / 3, 10
+    normal.type = 'Float32Array'
+
+    coord0.buffer = @coord0s
+    coord0.cursor = parseInt @coord0s.length / 2, 10
+    coord0.numComponents = 2
+    coord0.numElements = parseInt @coord0s.length / 2, 10
+    coord0.type = 'Float32Array'
+
+    for model, i in model_array
+      indices     = new tdl.primitives.AttribBuffer 3, 0
+      indices.buffer = @indices[i]
+      indices.cursor = parseInt @indices[i].length / 3, 10
+      indices.numComponents = 3
+      indices.numElements = parseInt @indices[i].length / 3, 10
+      indices.type = 'Uint16Array'
+    model_array
