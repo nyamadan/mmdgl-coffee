@@ -6,6 +6,24 @@ class MMD_GL.PMDMaterial
     @shiness = 0.0
     @specular = new Float32Array [0.0, 0.0, 0.0]
     @ambient = new Float32Array [0.0, 0.0, 0.0]
+    @edgeFlag = false
+
+  clone: ->
+    dst = new MMD_GL.PMDMaterial
+    dst.color = new Float32Array @color
+    dst.opacity = @opacity
+    dst.shiness = @shiness
+    dst.specular = new Float32Array @specular
+    dst.ambient = new Float32Array @ambient
+    dst.edgeFlag = @edgeFlag
+    dst
+
+class MMD_GL.Mesh
+  constructor: ->
+    @boneIndices = []
+    @boneWeights = []
+    @models = []
+    @materials = []
 
 class MMD_GL.PMD
   constructor: (bin) ->
@@ -28,8 +46,7 @@ class MMD_GL.PMD
     @positions = new Float32Array vertNum * 3
     @normals = new Float32Array vertNum * 3
     @coord0s = new Float32Array vertNum * 2
-    @bone0s = new Uint16Array vertNum
-    @bone1s = new Uint16Array vertNum
+    @boneIndices = new Array vertNum
     @boneWeights = new Float32Array vertNum
     @edgeFlags = new Uint8Array vertNum
 
@@ -37,17 +54,16 @@ class MMD_GL.PMD
     for i in [0...vertNum]
       @positions[i * 3 + 0] = (bin.readFloat32 1)[0]
       @positions[i * 3 + 1] = (bin.readFloat32 1)[0]
-      @positions[i * 3 + 2] = (-bin.readFloat32 1)[0]
+      @positions[i * 3 + 2] = -(bin.readFloat32 1)[0]
 
       @normals[i * 3 + 0] = (bin.readFloat32 1)[0]
       @normals[i * 3 + 1] = (bin.readFloat32 1)[0]
-      @normals[i * 3 + 2] = (-bin.readFloat32 1)[0]
+      @normals[i * 3 + 2] = -(bin.readFloat32 1)[0]
 
       @coord0s[i * 2 + 0] = (bin.readFloat32 1)[0]
       @coord0s[i * 2 + 1] = (bin.readFloat32 1)[0]
 
-      @bone0s[i] = (bin.readUint16 1)[0]
-      @bone1s[i] = (bin.readUint16 1)[0]
+      @boneIndices[i] = (bin.readUint16 2)
 
       @boneWeights[i] = (bin.readUint8 1)[0] / 100.0
       @edgeFlags[i] = if (bin.readUint8 1)[0] then true else false
@@ -87,14 +103,15 @@ class MMD_GL.PMD
       material.edgeFlag = if (bin.readUint8 1)[0] then true else false
 
       if 9 > toonIndex >= 0
-        material.texToon = "toon0#{toonIndex + 1}.bmp"
+        material.texToon = tdl.textures.loadTexture "toon0#{toonIndex + 1}.bmp"
       else if 99 > toonIndex >= 9
-        material.texToon = "toon#{toonIndex + 1}.bmp"
+        material.texToon = tdl.textures.loadTexture "toon#{toonIndex + 1}.bmp"
       else
-        material.texToon = null
+        material.texToon = MMD_GL.getWhitePixelTexture()
 
       materialIndexNum = ~~ ((bin.readUint32 1)[0] * 1)
       texturePath = MMD_GL.decodeSJIS(bin.readUint8 20)
+      material.tex0 = if texturePath.length > 0 then tdl.textures.loadTexture texturePath else MMD_GL.getWhitePixelTexture()
       @materials[i] = material
 
       # indices
@@ -107,9 +124,9 @@ class MMD_GL.PMD
     program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['toon0'], MMD_GL.fragmentShaderScript['toon0']
     throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
     
-    model_array = new Array @materials.length
-    model_array.bone0s = @bone0s
-    model_array.bone1s = @bone1s
+    mesh = new MMD_GL.Mesh
+    mesh.boneWeights = new Float32Array @boneWeights
+    mesh.boneIndices = ( new Uint16Array boneIndex for boneIndex in @boneIndices )
 
     position    = new tdl.primitives.AttribBuffer 3, 0
     normal      = new tdl.primitives.AttribBuffer 3, 0
@@ -133,11 +150,26 @@ class MMD_GL.PMD
     coord0.numElements = parseInt @coord0s.length / 2, 10
     coord0.type = 'Float32Array'
 
-    for model, i in model_array
+    mesh.models = new Array @materials.length
+    mesh.materials = new Array @materials.length
+    for model, i in mesh.models
       indices     = new tdl.primitives.AttribBuffer 3, 0
       indices.buffer = @indices[i]
       indices.cursor = parseInt @indices[i].length / 3, 10
       indices.numComponents = 3
       indices.numElements = parseInt @indices[i].length / 3, 10
       indices.type = 'Uint16Array'
-    model_array
+      
+      arrays = 
+        indices   : indices
+        position  : position
+        normal    : normal
+        coord0    : coord0
+      
+      textures = {}
+      textures.tex0 = @materials[i].tex0 if @materials[i].tex0?
+      textures.texToon = @materials[i].texToon if @materials[i].texToon?
+
+      mesh.models[i] = new tdl.models.Model program, arrays, textures
+      mesh.materials[i] = @materials[i].clone()
+    mesh

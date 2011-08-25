@@ -1,4 +1,3 @@
-sys = require 'sys'
 fs = require 'fs'
 
 {spawn} = require('child_process')
@@ -23,41 +22,42 @@ srcPmdTest = [
   'pmdtest.coffee'
 ]
 dstPmdTest = 'pmdtest.js'
+ 
+build = (outputfile, sources, watch = false) ->
+  arg = ['--compile', '--join'].concat(outputfile).concat(sources)
 
-build = (dst, src, watch = false) ->
-  arg = ['-j'].concat(dst).concat('-c').concat(src)
-
-  run = -> 
+  compile = -> 
     coffee = spawn 'coffee', arg
     coffee.stdout.on 'data', (data) ->
-      sys.puts data
+      console.log data
     coffee.stderr.on 'data', (data) ->
-      sys.puts data
+      console.log data
 
-  sys.puts "compile : #{dst}"
-  run()
+  console.log "#{(new Date).toLocaleTimeString()} - compiled #{outputfile}"
+  compile()
 
   if watch
-    for s in src
-      fs.watchFile s, (curr, prev) ->
-        sys.puts "compile : #{dst} @ #{curr.ctime}"
-        run() if curr.mtime != prev.mtime
-  0
+    for source in sources
+      fs.watchFile source, {persistent: true, interval: 500}, (curr, prev) ->
+        return if curr.mtime.getTime() is prev.mtime.getTime()
+        console.log "#{(new Date).toLocaleTimeString()} - compiled #{outputfile} (#{sources})"
+        compile()
+  return
 
 task "build", "build all", (options) ->
   build dstLib, srcLib, options.watch?
   build dstBinTest, srcBinTest, options.watch?
   build dstPmdTest, srcPmdTest, options.watch?
-  0
+  return
 
 task "build:lib", "build lib", (options) ->
   build dstLib, srcLib, options.watch?
-  0
+  return
 
 task "build:bintest", "build bintest", (options) ->
   build dstBinTest, srcBinTest, options.watch?
-  0
+  return
 
 task "build:pmdtest", "build pmdtest", (options) ->
   build dstPmdTest, srcPmdTest, options.watch?
-  0
+  return

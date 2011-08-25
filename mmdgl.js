@@ -6,8 +6,19 @@
     window.MMD_GL = {};
   };
   MMD_GL.debug = true;
+  MMD_GL.getWhitePixelTexture = (function() {
+    var texture;
+    texture = null;
+    return function() {
+      if (texture != null) {
+        return texture;
+      } else {
+        return texture = new tdl.textures.SolidTexture([255, 255, 255, 255]);
+      }
+    };
+  })();
   MMD_GL.vertexShaderScript = {
-    toon0: 'uniform mat4 world;\nuniform mat4 worldViewProjection;\n\nattribute vec3 position;\nattribute vec3 normal;\nattribute vec2 coord0;\nattribute vec2 texCoord;\n\nvarying vec4 vPosition;\nvarying vec4 vNormal;\nvarying vec2 vCoord0;\n\nvoid main() {\n\n    vPosition = world * vec4(position, 1.0);\n\n    vNormal = vec4((world * vec4(normal + position, 1.0)).xyz - vPosition.xyz, 1.0);\n    \n    vCoord0 = coord0;\n\n    gl_Position = worldViewProjection * vec4(position, 1.0);\n}'
+    toon0: 'uniform mat4 world;\nuniform mat4 worldViewProjection;\n\nattribute vec3 position;\nattribute vec3 normal;\nattribute vec2 coord0;\n\nvarying vec4 vPosition;\nvarying vec4 vNormal;\nvarying vec2 vCoord0;\n\nvoid main() {\n\n    vPosition = world * vec4(position, 1.0);\n\n    vNormal = vec4((world * vec4(normal + position, 1.0)).xyz - vPosition.xyz, 1.0);\n    \n    vCoord0 = coord0;\n\n    gl_Position = worldViewProjection * vec4(position, 1.0);\n}'
   };
   MMD_GL.fragmentShaderScript = {
     toon0: '#ifdef GL_ES\nprecision highp float;\n#endif\n\nuniform vec3 dlDirection;\nuniform vec3 dlColor;\n\nuniform vec3 color;\nuniform vec3 specular;\nuniform float shiness;\nuniform vec3 ambient;\n\nuniform sampler2D tex0;\nuniform sampler2D texToon;\n\nuniform vec3 eyeVec;\n\nvarying vec4 vPosition;\nvarying vec4 vNormal;\nvarying vec2 vCoord0;\n\nfloat saturate(float x) {\n    return max(min(x, 1.0), 0.0);\n}\n\nvoid main() {\n    float normalDotLight = saturate(dot(vNormal.xyz, -dlDirection));\n\n    vec3 spcColor = specular * pow(saturate(dot(reflect(-dlDirection, vNormal.xyz), eyeVec)), shiness);\n    vec3 ambColor = ambient;\n    vec3 tex0Color = texture2D(tex0, vCoord0).xyz;\n    vec3 texToonColor = texture2D(texToon, vec2(0.5, 1.0 - normalDotLight)).xyz;\n    vec3 dstColor = texToonColor * tex0Color * (color * dlColor + ambient * ambColor + spcColor) ;\n\n    gl_FragColor = vec4(dstColor, 1.0);\n}'
@@ -63,7 +74,7 @@
       if (code === 0) {
         break;
       }
-      ch = (code.toString(16)).toUpperCase();
+      ch = code.toString(16).toUpperCase();
       while (ch.length < 2) {
         ch = '0' + ch;
       }
@@ -78,8 +89,29 @@
       this.shiness = 0.0;
       this.specular = new Float32Array([0.0, 0.0, 0.0]);
       this.ambient = new Float32Array([0.0, 0.0, 0.0]);
+      this.edgeFlag = false;
     }
+    PMDMaterial.prototype.clone = function() {
+      var dst;
+      dst = new MMD_GL.PMDMaterial;
+      dst.color = new Float32Array(this.color);
+      dst.opacity = this.opacity;
+      dst.shiness = this.shiness;
+      dst.specular = new Float32Array(this.specular);
+      dst.ambient = new Float32Array(this.ambient);
+      dst.edgeFlag = this.edgeFlag;
+      return dst;
+    };
     return PMDMaterial;
+  })();
+  MMD_GL.Mesh = (function() {
+    function Mesh() {
+      this.boneIndices = [];
+      this.boneWeights = [];
+      this.models = [];
+      this.materials = [];
+    }
+    return Mesh;
   })();
   MMD_GL.PMD = (function() {
     function PMD(bin) {
@@ -94,21 +126,19 @@
       this.positions = new Float32Array(vertNum * 3);
       this.normals = new Float32Array(vertNum * 3);
       this.coord0s = new Float32Array(vertNum * 2);
-      this.bone0s = new Uint16Array(vertNum);
-      this.bone1s = new Uint16Array(vertNum);
+      this.boneIndices = new Array(vertNum);
       this.boneWeights = new Float32Array(vertNum);
       this.edgeFlags = new Uint8Array(vertNum);
       for (i = 0; 0 <= vertNum ? i < vertNum : i > vertNum; 0 <= vertNum ? i++ : i--) {
         this.positions[i * 3 + 0] = (bin.readFloat32(1))[0];
         this.positions[i * 3 + 1] = (bin.readFloat32(1))[0];
-        this.positions[i * 3 + 2] = (-bin.readFloat32(1))[0];
+        this.positions[i * 3 + 2] = -(bin.readFloat32(1))[0];
         this.normals[i * 3 + 0] = (bin.readFloat32(1))[0];
         this.normals[i * 3 + 1] = (bin.readFloat32(1))[0];
-        this.normals[i * 3 + 2] = (-bin.readFloat32(1))[0];
+        this.normals[i * 3 + 2] = -(bin.readFloat32(1))[0];
         this.coord0s[i * 2 + 0] = (bin.readFloat32(1))[0];
         this.coord0s[i * 2 + 1] = (bin.readFloat32(1))[0];
-        this.bone0s[i] = (bin.readUint16(1))[0];
-        this.bone1s[i] = (bin.readUint16(1))[0];
+        this.boneIndices[i] = bin.readUint16(2);
         this.boneWeights[i] = (bin.readUint8(1))[0] / 100.0;
         this.edgeFlags[i] = (bin.readUint8(1))[0] ? true : false;
       }
@@ -138,14 +168,15 @@
         toonIndex = (bin.readUint8(1))[0];
         material.edgeFlag = (bin.readUint8(1))[0] ? true : false;
         if ((9 > toonIndex && toonIndex >= 0)) {
-          material.texToon = "toon0" + (toonIndex + 1) + ".bmp";
+          material.texToon = tdl.textures.loadTexture("toon0" + (toonIndex + 1) + ".bmp");
         } else if ((99 > toonIndex && toonIndex >= 9)) {
-          material.texToon = "toon" + (toonIndex + 1) + ".bmp";
+          material.texToon = tdl.textures.loadTexture("toon" + (toonIndex + 1) + ".bmp");
         } else {
-          material.texToon = null;
+          material.texToon = MMD_GL.getWhitePixelTexture();
         }
         materialIndexNum = ~~((bin.readUint32(1))[0] * 1);
         texturePath = MMD_GL.decodeSJIS(bin.readUint8(20));
+        material.tex0 = texturePath.length > 0 ? tdl.textures.loadTexture(texturePath) : MMD_GL.getWhitePixelTexture();
         this.materials[i] = material;
         this.indices[i] = new Uint16Array(materialIndexNum);
         for (j = 0; 0 <= materialIndexNum ? j < materialIndexNum : j > materialIndexNum; 0 <= materialIndexNum ? j++ : j--) {
@@ -155,14 +186,23 @@
       }
     }
     PMD.prototype.createMesh = function() {
-      var coord0, i, indices, model, model_array, normal, position, program, _len;
+      var arrays, boneIndex, coord0, i, indices, mesh, model, normal, position, program, textures, _len, _ref2;
       program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['toon0'], MMD_GL.fragmentShaderScript['toon0']);
       if (!(program != null)) {
         throw "*** Error compiling shader : " + tdl.programs.lastError;
       }
-      model_array = new Array(this.materials.length);
-      model_array.bone0s = this.bone0s;
-      model_array.bone1s = this.bone1s;
+      mesh = new MMD_GL.Mesh;
+      mesh.boneWeights = new Float32Array(this.boneWeights);
+      mesh.boneIndices = (function() {
+        var _i, _len, _ref2, _results;
+        _ref2 = this.boneIndices;
+        _results = [];
+        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+          boneIndex = _ref2[_i];
+          _results.push(new Uint16Array(boneIndex));
+        }
+        return _results;
+      }).call(this);
       position = new tdl.primitives.AttribBuffer(3, 0);
       normal = new tdl.primitives.AttribBuffer(3, 0);
       coord0 = new tdl.primitives.AttribBuffer(2, 0);
@@ -181,16 +221,34 @@
       coord0.numComponents = 2;
       coord0.numElements = parseInt(this.coord0s.length / 2, 10);
       coord0.type = 'Float32Array';
-      for (i = 0, _len = model_array.length; i < _len; i++) {
-        model = model_array[i];
+      mesh.models = new Array(this.materials.length);
+      mesh.materials = new Array(this.materials.length);
+      _ref2 = mesh.models;
+      for (i = 0, _len = _ref2.length; i < _len; i++) {
+        model = _ref2[i];
         indices = new tdl.primitives.AttribBuffer(3, 0);
         indices.buffer = this.indices[i];
         indices.cursor = parseInt(this.indices[i].length / 3, 10);
         indices.numComponents = 3;
         indices.numElements = parseInt(this.indices[i].length / 3, 10);
         indices.type = 'Uint16Array';
+        arrays = {
+          indices: indices,
+          position: position,
+          normal: normal,
+          coord0: coord0
+        };
+        textures = {};
+        if (this.materials[i].tex0 != null) {
+          textures.tex0 = this.materials[i].tex0;
+        }
+        if (this.materials[i].texToon != null) {
+          textures.texToon = this.materials[i].texToon;
+        }
+        mesh.models[i] = new tdl.models.Model(program, arrays, textures);
+        mesh.materials[i] = this.materials[i].clone();
       }
-      return model_array;
+      return mesh;
     };
     return PMD;
   })();

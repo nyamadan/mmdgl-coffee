@@ -1,3 +1,8 @@
+MMD_GL.getWhitePixelTexture = do ->
+  texture = null
+  ->
+    if texture? then texture else texture = new tdl.textures.SolidTexture [255, 255, 255, 255]
+
 MMD_GL.vertexShaderScript = 
   toon0:
     '''
@@ -7,7 +12,6 @@ MMD_GL.vertexShaderScript =
     attribute vec3 position;
     attribute vec3 normal;
     attribute vec2 coord0;
-    attribute vec2 texCoord;
 
     varying vec4 vPosition;
     varying vec4 vNormal;
