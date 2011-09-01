@@ -27,6 +27,8 @@ tdl.require 'tdl.fast'
 tdl.require 'tdl.fps'
 tdl.require 'tdl.log'
 tdl.require 'tdl.math'
+tdl.require 'tdl.fast'
+tdl.require 'tdl.quaternions'
 tdl.require 'tdl.models'
 tdl.require 'tdl.primitives'
 tdl.require 'tdl.programs'
@@ -46,12 +48,7 @@ viewProjection = new Float32Array 16
 worldViewProjection = new Float32Array 16
 
 mesh = null
-
-light = null
-axis = null
-circle = null
-line = null
-
+coneModel = null
 
 angle = 0.0
 
@@ -105,12 +102,12 @@ render = ->
     dlDirection         : new Float32Array [0, 0, -1.0]
     eyeVec              : new Float32Array [0.0, 0.0, -1.0]
 
-  for model, i in mesh.models
-    material = mesh.materials[i]
-    model.drawPrep prep
-    model.draw material
+  mesh.draw prep
+  gl.disable gl.DEPTH_TEST
+  mesh.drawBone world, viewProjection
+  gl.enable gl.DEPTH_TEST
 
-  angle += 0.01;
+  angle += 0.02;
   return
 
 # Bootstrap
@@ -143,6 +140,10 @@ $ ->
       bin = new MMD_GL.Binary xhr.responseText
       pmd = new MMD_GL.PMD bin
       mesh = pmd.createMesh()
+      
+      program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']
+      throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
+
       mainLoop()
   .next ->
     console.log 'next operation'

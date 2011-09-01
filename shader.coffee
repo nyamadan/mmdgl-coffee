@@ -3,6 +3,16 @@ MMD_GL.getWhitePixelTexture = do ->
   ->
     if texture? then texture else texture = new tdl.textures.SolidTexture [255, 255, 255, 255]
 
+MMD_GL.getConeModel = do ->
+  model = null
+  ->
+    if model?
+      model
+    else
+      program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']
+      throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
+      model = new tdl.models.Model program, new tdl.primitives.createTruncatedCone(0.5, 0.0, 1.0, 3, 1)
+
 MMD_GL.vertexShaderScript = 
   toon0:
     '''
@@ -25,6 +35,17 @@ MMD_GL.vertexShaderScript =
         
         vCoord0 = coord0;
 
+        gl_Position = worldViewProjection * vec4(position, 1.0);
+    }
+    '''
+ 
+  color0:
+    '''
+    uniform mat4 worldViewProjection;
+    
+    attribute vec3 position;
+    
+    void main() {
         gl_Position = worldViewProjection * vec4(position, 1.0);
     }
     '''
@@ -67,5 +88,18 @@ MMD_GL.fragmentShaderScript =
         vec3 dstColor = texToonColor * tex0Color * (color * dlColor + ambient * ambColor + spcColor) ;
 
         gl_FragColor = vec4(dstColor, 1.0);
+    }
+    '''
+
+  color0:
+    '''
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    uniform vec3 color;
+
+    void main() {
+        gl_FragColor = vec4(color, 1.0);
     }
     '''

@@ -1,63 +1,71 @@
-fs = require 'fs'
-
-{spawn} = require('child_process')
+fs      = require 'fs'
+{puts}  = require 'sys'
+{spawn} = require 'child_process'
 
 option '-w', '--watch', 'watch script for changes, and recompile'
 
-srcLib = [
-  'core.coffee'
-  'shader.coffee'
-  'binary.coffee'
-  'encode.coffee'
-  'pmd.coffee'
-]
-dstLib = 'mmdgl.js'
+buildTasks =
+  lib:
+    description:
+      'build library'
+    sources: [
+      'core.coffee'
+      'shader.coffee'
+      'binary.coffee'
+      'encode.coffee'
+      'pmd.coffee'
+    ]
+    outputfile: 
+      'mmdgl.js'
 
-srcBinTest = [
-  'bintest.coffee'
-]
-dstBinTest = 'bintest.js'
+  bintest:
+    description:
+      'build bintest'
+    sources: [
+      'bintest.coffee'
+    ]
+    outputfile: 
+      'bintest.js'
 
-srcPmdTest = [
-  'pmdtest.coffee'
-]
-dstPmdTest = 'pmdtest.js'
- 
+  pmdtest:
+    description:
+      'build pmdtest'
+    sources: [
+      'pmdtest.coffee'
+    ]
+    outputfile: 
+      'pmdtest.js'
+
 build = (outputfile, sources, watch = false) ->
   arg = ['--compile', '--join'].concat(outputfile).concat(sources)
 
   compile = -> 
     coffee = spawn 'coffee', arg
     coffee.stdout.on 'data', (data) ->
-      console.log data
+      puts data
     coffee.stderr.on 'data', (data) ->
-      console.log data
+      puts data
 
-  console.log "#{(new Date).toLocaleTimeString()} - compiled #{outputfile}"
+  puts "#{(new Date).toLocaleTimeString()} - compiled #{outputfile}"
   compile()
 
   if watch
     for source in sources
       fs.watchFile source, {persistent: true, interval: 500}, (curr, prev) ->
         return if curr.mtime.getTime() is prev.mtime.getTime()
-        console.log "#{(new Date).toLocaleTimeString()} - compiled #{outputfile} (#{sources})"
+        puts "#{(new Date).toLocaleTimeString()} - compiled #{outputfile} (updated #{source})"
         compile()
   return
 
 task "build", "build all", (options) ->
-  build dstLib, srcLib, options.watch?
-  build dstBinTest, srcBinTest, options.watch?
-  build dstPmdTest, srcPmdTest, options.watch?
+  build buildTask.outputfile, buildTask.sources, options.watch? for own taskName, buildTask of buildTasks
   return
 
-task "build:lib", "build lib", (options) ->
-  build dstLib, srcLib, options.watch?
-  return
+for own taskName, buildTask of buildTasks
+  task "build:#{taskName}", buildTask.description, (options) ->
+    build buildTask.outputfile, buildTask.sources, options.watch?
 
-task "build:bintest", "build bintest", (options) ->
-  build dstBinTest, srcBinTest, options.watch?
-  return
-
-task "build:pmdtest", "build pmdtest", (options) ->
-  build dstPmdTest, srcPmdTest, options.watch?
+task "clean", "cleanup", (options) ->
+  arg = ['-f'].concat(buildTask.outputfile for own taskName, buildTask of buildTasks)
+  rm = spawn 'rm', arg
   return
