@@ -11,7 +11,17 @@ MMD_GL.getConeModel = do ->
     else
       program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']
       throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
-      model = new tdl.models.Model program, new tdl.primitives.createTruncatedCone(0.5, 0.0, 1.0, 3, 1)
+      model = new tdl.models.Model program, new tdl.primitives.createTruncatedCone(0.25, 0.0, 1.0, 3, 1)
+
+MMD_GL.getSphereModel = do ->
+  model = null
+  ->
+    if model?
+      model
+    else
+      program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']
+      throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
+      model = new tdl.models.Model program, new tdl.primitives.createSphere(0.5, 8, 8)
 
 MMD_GL.vertexShaderScript = 
   toon0:

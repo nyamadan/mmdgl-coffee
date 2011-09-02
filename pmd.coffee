@@ -54,30 +54,56 @@ class MMD_GL.Mesh
     worldViewProjection = new Float32Array 16
 
     coneModel = MMD_GL.getConeModel()
+    sphereModel = MMD_GL.getSphereModel()
 
     coneModel.drawPrep()
     for bone in @bones
-      y = tdl.math.normalize bone.pos
+      continue if bone.type == 6 or bone.type == 7
+
+      boneDir = tdl.math.subVector(@bones[bone.tailIndex].pos, bone.pos)
+      boneLength = tdl.math.length(boneDir)
+      midPos = tdl.math.mulVectorScalar(tdl.math.addVector(@bones[bone.tailIndex].pos, bone.pos), 0.5)
+
+      y = tdl.math.normalize boneDir
       z = tdl.math.normalize tdl.math.cross([0, 1, 0], y)
       if tdl.math.lengthSquared(z) < 0.001
         z = [0, 0, 1]
       x = tdl.math.normalize tdl.math.cross(y, z)
 
-      tdl.fast.matrix4.mul world2,
-        (new Float32Array [
+      world2 = tdl.math.matrix4.copy world
+      world2 = tdl.math.matrix4.mul (new Float32Array [
           x[0], x[1], x[2], 0 
-          y[0], y[1], y[2], 0
+          y[0] * boneLength, y[1] * boneLength, y[2] * boneLength, 0
           z[0], z[1], z[2], 0
-          bone.pos[0], bone.pos[1], bone.pos[2], 1
+          midPos[0], midPos[1], midPos[2], 1
         ]), 
-        world
+        world2
 
       tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
 
       coneModel.draw {
+        color : new Float32Array [0.8, 0.0, 0.0]
+        worldViewProjection : worldViewProjection
+      }
+
+    sphereModel.drawPrep()
+    for bone in @bones
+      world2 = tdl.math.matrix4.copy world
+      world2 = tdl.math.matrix4.mul (new Float32Array [
+          0.5, 0, 0, 0 
+          0, 0.5, 0, 0
+          0, 0, 0.5, 0
+          bone.pos[0], bone.pos[1], bone.pos[2], 1
+        ]), 
+        world2
+
+      tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
+
+      sphereModel.draw {
         color : new Float32Array [0.8, 0.8, 0.8]
         worldViewProjection : worldViewProjection
       }
+
     return
 
 class MMD_GL.PMD

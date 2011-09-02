@@ -29,7 +29,23 @@
         if (!(program != null)) {
           throw "*** Error compiling shader : " + tdl.programs.lastError;
         }
-        return model = new tdl.models.Model(program, new tdl.primitives.createTruncatedCone(0.5, 0.0, 1.0, 3, 1));
+        return model = new tdl.models.Model(program, new tdl.primitives.createTruncatedCone(0.25, 0.0, 1.0, 3, 1));
+      }
+    };
+  })();
+  MMD_GL.getSphereModel = (function() {
+    var model;
+    model = null;
+    return function() {
+      var program;
+      if (model != null) {
+        return model;
+      } else {
+        program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']);
+        if (!(program != null)) {
+          throw "*** Error compiling shader : " + tdl.programs.lastError;
+        }
+        return model = new tdl.models.Model(program, new tdl.primitives.createSphere(0.5, 8, 8));
       }
     };
   })();
@@ -162,23 +178,43 @@
       }
     };
     Mesh.prototype.drawBone = function(world, viewProjection) {
-      var bone, coneModel, world2, worldViewProjection, x, y, z, _i, _len, _ref2;
+      var bone, boneDir, boneLength, coneModel, midPos, sphereModel, world2, worldViewProjection, x, y, z, _i, _j, _len, _len2, _ref2, _ref3;
       world2 = new Float32Array(world);
       worldViewProjection = new Float32Array(16);
       coneModel = MMD_GL.getConeModel();
+      sphereModel = MMD_GL.getSphereModel();
       coneModel.drawPrep();
       _ref2 = this.bones;
       for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
         bone = _ref2[_i];
-        y = tdl.math.normalize(bone.pos);
+        if (bone.type === 6 || bone.type === 7) {
+          continue;
+        }
+        boneDir = tdl.math.subVector(this.bones[bone.tailIndex].pos, bone.pos);
+        boneLength = tdl.math.length(boneDir);
+        midPos = tdl.math.mulVectorScalar(tdl.math.addVector(this.bones[bone.tailIndex].pos, bone.pos), 0.5);
+        y = tdl.math.normalize(boneDir);
         z = tdl.math.normalize(tdl.math.cross([0, 1, 0], y));
         if (tdl.math.lengthSquared(z) < 0.001) {
           z = [0, 0, 1];
         }
         x = tdl.math.normalize(tdl.math.cross(y, z));
-        tdl.fast.matrix4.mul(world2, new Float32Array([x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, bone.pos[0], bone.pos[1], bone.pos[2], 1]), world);
+        world2 = tdl.math.matrix4.copy(world);
+        world2 = tdl.math.matrix4.mul(new Float32Array([x[0], x[1], x[2], 0, y[0] * boneLength, y[1] * boneLength, y[2] * boneLength, 0, z[0], z[1], z[2], 0, midPos[0], midPos[1], midPos[2], 1]), world2);
         tdl.fast.matrix4.mul(worldViewProjection, world2, viewProjection);
         coneModel.draw({
+          color: new Float32Array([0.8, 0.0, 0.0]),
+          worldViewProjection: worldViewProjection
+        });
+      }
+      sphereModel.drawPrep();
+      _ref3 = this.bones;
+      for (_j = 0, _len2 = _ref3.length; _j < _len2; _j++) {
+        bone = _ref3[_j];
+        world2 = tdl.math.matrix4.copy(world);
+        world2 = tdl.math.matrix4.mul(new Float32Array([0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, bone.pos[0], bone.pos[1], bone.pos[2], 1]), world2);
+        tdl.fast.matrix4.mul(worldViewProjection, world2, viewProjection);
+        sphereModel.draw({
           color: new Float32Array([0.8, 0.8, 0.8]),
           worldViewProjection: worldViewProjection
         });
