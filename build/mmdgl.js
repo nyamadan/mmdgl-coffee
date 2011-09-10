@@ -1,10 +1,8 @@
 (function() {
   var _ref;
-    if ((_ref = window.MMD_GL) != null) {
-    _ref;
-  } else {
+  if ((_ref = window.MMD_GL) == null) {
     window.MMD_GL = {};
-  };
+  }
   MMD_GL.debug = true;
   MMD_GL.getWhitePixelTexture = (function() {
     var texture;
@@ -224,7 +222,7 @@
   })();
   MMD_GL.PMD = (function() {
     function PMD(bin) {
-      var bone, i, indexNum, indices, j, material, materialIndexNum, offset, texturePath, toonIndex, vertNum, _fn, _len, _ref2, _ref3, _step;
+      var bone, i, indexNum, indices, j, material, materialIndexNum, offset, texturePath, toonIndex, vertNum, _fn, _len, _ref2, _ref3;
       if (MMD_GL.decodeSJIS(bin.readUint8(3)) !== 'Pmd') {
         throw 'bin is not pmd data';
       }
@@ -259,7 +257,7 @@
         indices[i + 1] = indices[i + 2];
         return indices[i + 2] = tmp;
       };
-      for (i = 0, _step = 3; 0 <= indexNum ? i < indexNum : i > indexNum; i += _step) {
+      for (i = 0; i < indexNum; i += 3) {
         _fn(i);
       }
       this.materials = new Array((bin.readUint32(1))[0]);

@@ -9,32 +9,32 @@ buildTasks =
     description:
       'build library'
     sources: [
-      'core.coffee'
-      'shader.coffee'
-      'binary.coffee'
-      'encode.coffee'
-      'pmd.coffee'
+      'src/core.coffee'
+      'src/shader.coffee'
+      'src/binary.coffee'
+      'src/encode.coffee'
+      'src/pmd.coffee'
     ]
     outputfile: 
-      'mmdgl.js'
+      'build/mmdgl.js'
 
   bintest:
     description:
       'build bintest'
     sources: [
-      'bintest.coffee'
+      'example/bintest.coffee'
     ]
     outputfile: 
-      'bintest.js'
+      'example/bintest.js'
 
   pmdtest:
     description:
       'build pmdtest'
     sources: [
-      'pmdtest.coffee'
+      'example/pmdtest.coffee'
     ]
     outputfile: 
-      'pmdtest.js'
+      'example/pmdtest.js'
 
 build = (outputfile, sources, watch = false) ->
   arg = ['--compile', '--join'].concat(outputfile).concat(sources)
