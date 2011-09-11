@@ -153,7 +153,7 @@
       dst.tailIndex = this.tailIndex;
       dst.type = this.type;
       dst.parentIkIndex = this.parentIkIndex;
-      dst.pos = this.pos;
+      dst.pos = new Float32Array(this.pos);
       return dst;
     };
     return Bone;
@@ -165,7 +165,14 @@
       this.boneWeights = [];
       this.models = [];
       this.materials = [];
+      this.transformedPositions = null;
+      this.parentPMD = null;
     }
+    Mesh.prototype.transform = function() {
+      var buf;
+      buf = this.models[0].buffers.position;
+      return gl.bindBuffer(buf.target, buf.buffer());
+    };
     Mesh.prototype.draw = function(prep) {
       var i, model, _len, _ref2;
       _ref2 = this.models;
@@ -222,7 +229,7 @@
   })();
   MMD_GL.PMD = (function() {
     function PMD(bin) {
-      var bone, i, indexNum, indices, j, material, materialIndexNum, offset, texturePath, toonIndex, vertNum, _fn, _len, _ref2, _ref3;
+      var bone, buf, i, indexNum, indices, j, material, materialIndexNum, offset, texturePath, toonIndex, vertNum, _fn, _len, _ref2, _ref3;
       if (MMD_GL.decodeSJIS(bin.readUint8(3)) !== 'Pmd') {
         throw 'bin is not pmd data';
       }
@@ -230,24 +237,23 @@
       this.modelName = MMD_GL.decodeSJIS(bin.readUint8(20));
       this.comment = MMD_GL.decodeSJIS(bin.readUint8(256));
       vertNum = (bin.readUint32(1))[0];
-      this.positions = new Float32Array(vertNum * 3);
-      this.normals = new Float32Array(vertNum * 3);
-      this.coord0s = new Float32Array(vertNum * 2);
-      this.boneIndices = new Array(vertNum);
-      this.boneWeights = new Float32Array(vertNum);
-      this.edgeFlags = new Uint8Array(vertNum);
+      this.positions = new tdl.primitives.AttribBuffer(3, vertNum);
+      this.normals = new tdl.primitives.AttribBuffer(3, vertNum);
+      this.coord0s = new tdl.primitives.AttribBuffer(2, vertNum);
+      this.boneIndices = new tdl.primitives.AttribBuffer(2, vertNum, 'Uint16Array');
+      this.boneWeights = new tdl.primitives.AttribBuffer(1, vertNum);
+      this.edgeFlags = new tdl.primitives.AttribBuffer(1, vertNum, 'Array');
       for (i = 0; 0 <= vertNum ? i < vertNum : i > vertNum; 0 <= vertNum ? i++ : i--) {
-        this.positions[i * 3 + 0] = (bin.readFloat32(1))[0];
-        this.positions[i * 3 + 1] = (bin.readFloat32(1))[0];
-        this.positions[i * 3 + 2] = -(bin.readFloat32(1))[0];
-        this.normals[i * 3 + 0] = (bin.readFloat32(1))[0];
-        this.normals[i * 3 + 1] = (bin.readFloat32(1))[0];
-        this.normals[i * 3 + 2] = -(bin.readFloat32(1))[0];
-        this.coord0s[i * 2 + 0] = (bin.readFloat32(1))[0];
-        this.coord0s[i * 2 + 1] = (bin.readFloat32(1))[0];
-        this.boneIndices[i] = bin.readUint16(2);
-        this.boneWeights[i] = (bin.readUint8(1))[0] / 100.0;
-        this.edgeFlags[i] = (bin.readUint8(1))[0] ? true : false;
+        buf = bin.readFloat32(3);
+        buf[2] = -buf[2];
+        this.positions.push(buf);
+        buf = bin.readFloat32(3);
+        buf[2] = -buf[2];
+        this.normals.push(buf);
+        this.coord0s.push(bin.readFloat32(2));
+        this.boneIndices.push(bin.readUint16(2));
+        this.boneWeights.push([(bin.readUint8(1))[0] / 100.0]);
+        this.edgeFlags.push([(bin.readUint8(1))[0] !== 0 ? true : false]);
       }
       indexNum = (bin.readUint32(1))[0];
       indices = bin.readUint16(indexNum);
@@ -289,6 +295,7 @@
         for (j = 0; 0 <= materialIndexNum ? j < materialIndexNum : j > materialIndexNum; 0 <= materialIndexNum ? j++ : j--) {
           this.indices[i][j] = indices[offset + j];
         }
+        this.indices[i] = new tdl.primitives.AttribBuffer(3, this.indices[i], 'Uint16Array');
         offset += materialIndexNum;
       }
       this.bones = new Array((bin.readUint16(1))[0]);
@@ -308,23 +315,15 @@
       return;
     }
     PMD.prototype.createMesh = function() {
-      var arrays, bone, boneIndex, coord0, i, indices, mesh, model, normal, position, program, textures, _len, _ref2;
+      var arrays, bone, i, mesh, model, program, textures, _len, _ref2;
       program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['toon0'], MMD_GL.fragmentShaderScript['toon0']);
       if (!(program != null)) {
         throw "*** Error compiling shader : " + tdl.programs.lastError;
       }
       mesh = new MMD_GL.Mesh;
-      mesh.boneWeights = new Float32Array(this.boneWeights);
-      mesh.boneIndices = (function() {
-        var _i, _len, _ref2, _results;
-        _ref2 = this.boneIndices;
-        _results = [];
-        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
-          boneIndex = _ref2[_i];
-          _results.push(new Uint16Array(boneIndex));
-        }
-        return _results;
-      }).call(this);
+      mesh.parentPMD = this;
+      mesh.boneWeights = this.boneWeights.clone();
+      mesh.boneIndices = this.boneIndices.clone();
       mesh.bones = (function() {
         var _i, _len, _ref2, _results;
         _ref2 = this.bones;
@@ -335,20 +334,16 @@
         }
         return _results;
       }).call(this);
-      position = new tdl.primitives.AttribBuffer(3, this.positions);
-      normal = new tdl.primitives.AttribBuffer(3, this.normals);
-      coord0 = new tdl.primitives.AttribBuffer(2, this.coord0s);
       mesh.models = new Array(this.materials.length);
       mesh.materials = new Array(this.materials.length);
       _ref2 = mesh.models;
       for (i = 0, _len = _ref2.length; i < _len; i++) {
         model = _ref2[i];
-        indices = new tdl.primitives.AttribBuffer(3, this.indices[i], 'Uint16Array');
         arrays = {
-          indices: indices,
-          position: position,
-          normal: normal,
-          coord0: coord0
+          indices: this.indices[i],
+          position: this.positions,
+          normal: this.normals,
+          coord0: this.coord0s
         };
         textures = {};
         if (this.materials[i].tex0 != null) {

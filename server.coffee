@@ -1,7 +1,7 @@
 express = require 'express'
-server = express.createServer(
+express = express.createServer(
   express.favicon(),
   express.logger(),
   express.static(__dirname)
-);
-server.listen 16810
+)
+express.listen 16810

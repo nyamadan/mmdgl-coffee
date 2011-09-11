@@ -12,7 +12,7 @@ class Http
           deferred.fail xhr
     xhr.overrideMimeType 'text/plain; charset=x-user-defined'
 
-    deferred.canceller = -> 
+    deferred.canceller = ->
       xhr.abort
 
     xhr.open 'GET', uri
@@ -64,7 +64,7 @@ mainLoop = () ->
   fpsTimer.update fpsTimer.elapsedTime
   fpsTimer.elem.innerHTML = "FPS&nbsp;#{fpsTimer.averageFPS}"
 
-  render();
+  render()
   return
 
 # render function
@@ -95,7 +95,9 @@ render = ->
   tdl.fast.matrix4.rotationY world, angle
   tdl.fast.matrix4.mul worldViewProjection, world, viewProjection
 
-  prep = 
+  mesh.transform()
+
+  prep =
     world               : world
     worldViewProjection : worldViewProjection
     dlColor             : new Float32Array [1.0, 1.0, 1.0]
@@ -107,7 +109,7 @@ render = ->
   mesh.drawBone world, viewProjection
   gl.enable gl.DEPTH_TEST
 
-  angle += 0.02;
+  angle += 0.02
   return
 
 # Bootstrap

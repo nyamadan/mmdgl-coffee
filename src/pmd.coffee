@@ -17,6 +17,7 @@ class MMD_GL.PMDMaterial
     dst.ambient = new Float32Array @ambient
     dst.edgeFlag = @edgeFlag
     dst
+
 class MMD_GL.Bone
   constructor: ->
     @name = ''
@@ -32,7 +33,7 @@ class MMD_GL.Bone
     dst.tailIndex = @tailIndex
     dst.type = @type
     dst.parentIkIndex = @parentIkIndex
-    dst.pos = @pos
+    dst.pos = new Float32Array @pos
     dst
 
 class MMD_GL.Mesh
@@ -42,6 +43,12 @@ class MMD_GL.Mesh
     @boneWeights = []
     @models = []
     @materials = []
+    @transformedPositions = null
+    @parentPMD = null
+
+  transform: ->
+    buf = @models[0].buffers.position
+    gl.bindBuffer buf.target, buf.buffer()
 
   draw: (prep) ->
     for model, i in @models
@@ -72,11 +79,11 @@ class MMD_GL.Mesh
 
       world2 = tdl.math.matrix4.copy world
       world2 = tdl.math.matrix4.mul (new Float32Array [
-          x[0], x[1], x[2], 0 
+          x[0], x[1], x[2], 0
           y[0] * boneLength, y[1] * boneLength, y[2] * boneLength, 0
           z[0], z[1], z[2], 0
           midPos[0], midPos[1], midPos[2], 1
-        ]), 
+        ]),
         world2
 
       tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
@@ -90,11 +97,11 @@ class MMD_GL.Mesh
     for bone in @bones
       world2 = tdl.math.matrix4.copy world
       world2 = tdl.math.matrix4.mul (new Float32Array [
-          0.5, 0, 0, 0 
+          0.5, 0, 0, 0
           0, 0.5, 0, 0
           0, 0, 0.5, 0
           bone.pos[0], bone.pos[1], bone.pos[2], 1
-        ]), 
+        ]),
         world2
 
       tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
@@ -124,38 +131,35 @@ class MMD_GL.PMD
     vertNum = (bin.readUint32 1)[0]
 
     # allocate vertices
-    @positions = new Float32Array vertNum * 3
-    @normals = new Float32Array vertNum * 3
-    @coord0s = new Float32Array vertNum * 2
-    @boneIndices = new Array vertNum
-    @boneWeights = new Float32Array vertNum
-    @edgeFlags = new Uint8Array vertNum
+    @positions = new tdl.primitives.AttribBuffer 3, vertNum
+    @normals = new tdl.primitives.AttribBuffer 3, vertNum
+    @coord0s = new tdl.primitives.AttribBuffer 2, vertNum
+    @boneIndices = new tdl.primitives.AttribBuffer 2, vertNum, 'Uint16Array'
+    @boneWeights = new tdl.primitives.AttribBuffer 1, vertNum
+    @edgeFlags = new tdl.primitives.AttribBuffer 1, vertNum, 'Array'
 
     # read vertices
     for i in [0...vertNum]
-      @positions[i * 3 + 0] = (bin.readFloat32 1)[0]
-      @positions[i * 3 + 1] = (bin.readFloat32 1)[0]
-      @positions[i * 3 + 2] = -(bin.readFloat32 1)[0]
+      buf = (bin.readFloat32 3)
+      buf[2] = -buf[2]
+      @positions.push buf
 
-      @normals[i * 3 + 0] = (bin.readFloat32 1)[0]
-      @normals[i * 3 + 1] = (bin.readFloat32 1)[0]
-      @normals[i * 3 + 2] = -(bin.readFloat32 1)[0]
+      buf = (bin.readFloat32 3)
+      buf[2] = -buf[2]
+      @normals.push buf
 
-      @coord0s[i * 2 + 0] = (bin.readFloat32 1)[0]
-      @coord0s[i * 2 + 1] = (bin.readFloat32 1)[0]
+      @coord0s.push (bin.readFloat32 2)
 
-      @boneIndices[i] = (bin.readUint16 2)
-
-      @boneWeights[i] = (bin.readUint8 1)[0] / 100.0
-      @edgeFlags[i] = if (bin.readUint8 1)[0] then true else false
-
+      @boneIndices.push (bin.readUint16 2)
+      @boneWeights.push [(bin.readUint8 1)[0] / 100.0]
+      @edgeFlags.push [if (bin.readUint8 1)[0] != 0 then true else false]
+    
     # read number of index ((number of face) * 3)
     indexNum = (bin.readUint32 1)[0]
     indices = (bin.readUint16 indexNum)
-
     # Inverce Face
     for i in [0...indexNum] by 3
-      do (i) -> 
+      do (i) ->
         tmp = indices[i + 1]
         indices[i + 1] = indices[i + 2]
         indices[i + 2] = tmp
@@ -165,8 +169,7 @@ class MMD_GL.PMD
     @indices = new Array this.materials.length
 
     texturePath = ''
-    toonIndex = null;
-    
+    toonIndex = null
     # indices offset
     offset = 0
     
@@ -199,7 +202,9 @@ class MMD_GL.PMD
       @indices[i] = new Uint16Array materialIndexNum
       for j in [0...materialIndexNum]
         @indices[i][j] = indices[offset + j]
+      @indices[i] = new tdl.primitives.AttribBuffer 3, @indices[i], 'Uint16Array'
       offset += materialIndexNum
+    # end of material loop
 
     @bones = new Array (bin.readUint16 1)[0]
     
@@ -220,25 +225,20 @@ class MMD_GL.PMD
     throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
     
     mesh = new MMD_GL.Mesh
-    mesh.boneWeights = new Float32Array @boneWeights
-    mesh.boneIndices = ( new Uint16Array boneIndex for boneIndex in @boneIndices )
+    mesh.parentPMD = this
+    mesh.boneWeights = @boneWeights.clone()
+    mesh.boneIndices = @boneIndices.clone()
     
     mesh.bones = ( bone.clone() for bone in @bones)
  
-    position    = new tdl.primitives.AttribBuffer 3, @positions
-    normal      = new tdl.primitives.AttribBuffer 3, @normals
-    coord0      = new tdl.primitives.AttribBuffer 2, @coord0s
-
     mesh.models = new Array @materials.length
     mesh.materials = new Array @materials.length
     for model, i in mesh.models
-      indices     = new tdl.primitives.AttribBuffer 3, @indices[i], 'Uint16Array'
-      
-      arrays = 
-        indices   : indices
-        position  : position
-        normal    : normal
-        coord0    : coord0
+      arrays =
+        indices   : @indices[i]
+        position  : @positions
+        normal    : @normals
+        coord0    : @coord0s
       
       textures = {}
       textures.tex0 = @materials[i].tex0 if @materials[i].tex0?

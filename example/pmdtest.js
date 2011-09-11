@@ -73,6 +73,7 @@
     gl.enable(gl.DEPTH_TEST);
     tdl.fast.matrix4.rotationY(world, angle);
     tdl.fast.matrix4.mul(worldViewProjection, world, viewProjection);
+    mesh.transform();
     prep = {
       world: world,
       worldViewProjection: worldViewProjection,
