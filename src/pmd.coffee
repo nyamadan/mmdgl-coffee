@@ -43,12 +43,20 @@ class MMD_GL.Mesh
     @boneWeights = []
     @models = []
     @materials = []
+
+    @positions = null
     @transformedPositions = null
-    @parentPMD = null
+
+    @bones = null
+    @transformedBones = null
 
   transform: ->
-    buf = @models[0].buffers.position
-    gl.bindBuffer buf.target, buf.buffer()
+    positionBuffer = @models[0].buffers.position
+    gl.bindBuffer positionBuffer.target, positionBuffer.buffer()
+
+    for v, i in @positions.buffer
+      @transformedPositions.buffer[i] = v * 0.2
+    gl.bufferData positionBuffer.target, @transformedPositions.buffer, gl.DYNAMIC_DRAW
 
   draw: (prep) ->
     for model, i in @models
@@ -225,25 +233,37 @@ class MMD_GL.PMD
     throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
     
     mesh = new MMD_GL.Mesh
-    mesh.parentPMD = this
-    mesh.boneWeights = @boneWeights.clone()
-    mesh.boneIndices = @boneIndices.clone()
-    
-    mesh.bones = ( bone.clone() for bone in @bones)
- 
+
+    # give references
+    mesh.bones = @bones
+    mesh.boneWeights = @boneWeights
+    mesh.boneIndices = @boneIndices
+    mesh.positions = @positions
+    mesh.normals = @normals
+    mesh.coord0s = @coord0s
+
+    # clone of positions and bones
+    mesh.transformedPositions = @positions.clone()
+    mesh.transformedBones = ( bone.clone() for bone in @bones)
+
+    # create webgl buffers
+    position = new tdl.buffers.Buffer @positions
+    normal = new tdl.buffers.Buffer @normals
+    coord0 = new tdl.buffers.Buffer @coord0s
+
     mesh.models = new Array @materials.length
     mesh.materials = new Array @materials.length
     for model, i in mesh.models
       arrays =
         indices   : @indices[i]
-        position  : @positions
-        normal    : @normals
-        coord0    : @coord0s
-      
       textures = {}
       textures.tex0 = @materials[i].tex0 if @materials[i].tex0?
       textures.texToon = @materials[i].texToon if @materials[i].texToon?
 
       mesh.models[i] = new tdl.models.Model program, arrays, textures
+      mesh.models[i].buffers.position = position
+      mesh.models[i].buffers.normal = normal
+      mesh.models[i].buffers.coord0 = coord0
+
       mesh.materials[i] = @materials[i].clone()
     mesh

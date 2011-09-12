@@ -13,9 +13,10 @@ buildTasks =
       'src/shader.coffee'
       'src/binary.coffee'
       'src/encode.coffee'
+      'src/model.coffee'
       'src/pmd.coffee'
     ]
-    outputfile: 
+    outputfile:
       'build/mmdgl.js'
 
   bintest:
@@ -24,7 +25,7 @@ buildTasks =
     sources: [
       'example/bintest.coffee'
     ]
-    outputfile: 
+    outputfile:
       'example/bintest.js'
 
   pmdtest:
@@ -33,13 +34,13 @@ buildTasks =
     sources: [
       'example/pmdtest.coffee'
     ]
-    outputfile: 
+    outputfile:
       'example/pmdtest.js'
 
 build = (outputfile, sources, watch = false) ->
   arg = ['--compile', '--join'].concat(outputfile).concat(sources)
 
-  compile = -> 
+  compile = ->
     coffee = spawn 'coffee', arg
     coffee.stdout.on 'data', (data) ->
       puts data

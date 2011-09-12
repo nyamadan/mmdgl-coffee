@@ -23,7 +23,7 @@ MMD_GL.getSphereModel = do ->
       throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
       model = new tdl.models.Model program, new tdl.primitives.createSphere(0.5, 8, 8)
 
-MMD_GL.vertexShaderScript = 
+MMD_GL.vertexShaderScript =
   toon0:
     '''
     uniform mat4 world;

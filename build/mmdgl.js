@@ -114,6 +114,100 @@
     }
     return UnescapeSJIS(str);
   };
+  MMD_GL.Model = (function() {
+    function Model() {
+      this.buffers = {};
+      this.mode = null;
+      this.textures = {};
+      this.textureUnits = {};
+      this.program = null;
+      if (arguments.length >= 2) {
+        this.createBuffer(arguments[0], arguments[1], arguments[2], arguments[3]);
+      }
+    }
+    Model.prototype.createBuffer = function(program, arrays, textures, opt_mode) {
+      var texture, textureUnits, unit;
+      this.setBuffers(arrays);
+      textureUnits = {};
+      unit = 0;
+      for (texture in program.textures) {
+        textureUnits[texture] = unit++;
+      }
+      this.mode = opt_mode === void 0 ? gl.TRIANGLES : opt_mode;
+      this.textures = textures;
+      this.textureUnits = textureUnits;
+      this.setProgram(program);
+      return this;
+    };
+    Model.prototype.setProgram = function(program) {
+      this.program = program;
+      return program;
+    };
+    Model.prototype.setBuffers = function(arrays) {
+      var array, name;
+      for (name in arrays) {
+        array = arrays[name];
+        this.setBuffer(name, array);
+      }
+      return arrays;
+    };
+    Model.prototype.setBuffer = function(name, array) {
+      var b, target;
+      target = name === 'indices' ? gl.ELEMENT_ARRAY_BUFFER : gl.ARRAY_BUFFER;
+      b = this.buffers[name];
+      if (!b) {
+        b = new tdl.buffers.Buffer(array, target);
+      } else {
+        b.set(array);
+      }
+      this.buffers[name] = b;
+      return b;
+    };
+    Model.prototype.applyUniforms_ = function(opt_uniforms) {
+      var program, uniform;
+      if (opt_uniforms) {
+        program = this.program;
+        for (uniform in opt_uniforms) {
+          program.setUniform(uniform, opt_uniforms[uniform]);
+        }
+      }
+    };
+    Model.prototype.drawPrep = function() {
+      var arg, attrib, b, buffer, buffers, program, textures, _i, _len, _results;
+      program = this.program;
+      buffers = this.buffers;
+      textures = this.textures;
+      program.use();
+      for (buffer in buffers) {
+        b = buffers[buffer];
+        if (buffer === 'indices') {
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b.buffer());
+        } else {
+          attrib = program.attrib[buffer];
+          if (attrib) {
+            attrib(b);
+          }
+        }
+      }
+      this.applyUniforms_(textures);
+      _results = [];
+      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+        arg = arguments[_i];
+        _results.push(this.applyUniforms_(arg));
+      }
+      return _results;
+    };
+    Model.prototype.draw = function() {
+      var arg, buffers, _i, _len;
+      for (_i = 0, _len = arguments.length; _i < _len; _i++) {
+        arg = arguments[_i];
+        this.applyUniforms_(arg);
+      }
+      buffers = this.buffers;
+      return gl.drawElements(this.mode, buffers.indices.totalComponents(), gl.UNSIGNED_SHORT, 0);
+    };
+    return Model;
+  })();
   MMD_GL.PMDMaterial = (function() {
     function PMDMaterial() {
       this.color = new Float32Array([0.0, 0.0, 0.0]);
@@ -165,13 +259,21 @@
       this.boneWeights = [];
       this.models = [];
       this.materials = [];
+      this.positions = null;
       this.transformedPositions = null;
-      this.parentPMD = null;
+      this.bones = null;
+      this.transformedBones = null;
     }
     Mesh.prototype.transform = function() {
-      var buf;
-      buf = this.models[0].buffers.position;
-      return gl.bindBuffer(buf.target, buf.buffer());
+      var i, positionBuffer, v, _len, _ref2;
+      positionBuffer = this.models[0].buffers.position;
+      gl.bindBuffer(positionBuffer.target, positionBuffer.buffer());
+      _ref2 = this.positions.buffer;
+      for (i = 0, _len = _ref2.length; i < _len; i++) {
+        v = _ref2[i];
+        this.transformedPositions.buffer[i] = v * 0.2;
+      }
+      return gl.bufferData(positionBuffer.target, this.transformedPositions.buffer, gl.DYNAMIC_DRAW);
     };
     Mesh.prototype.draw = function(prep) {
       var i, model, _len, _ref2;
@@ -315,16 +417,20 @@
       return;
     }
     PMD.prototype.createMesh = function() {
-      var arrays, bone, i, mesh, model, program, textures, _len, _ref2;
+      var arrays, bone, coord0, i, mesh, model, normal, position, program, textures, _len, _ref2;
       program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['toon0'], MMD_GL.fragmentShaderScript['toon0']);
       if (!(program != null)) {
         throw "*** Error compiling shader : " + tdl.programs.lastError;
       }
       mesh = new MMD_GL.Mesh;
-      mesh.parentPMD = this;
-      mesh.boneWeights = this.boneWeights.clone();
-      mesh.boneIndices = this.boneIndices.clone();
-      mesh.bones = (function() {
+      mesh.bones = this.bones;
+      mesh.boneWeights = this.boneWeights;
+      mesh.boneIndices = this.boneIndices;
+      mesh.positions = this.positions;
+      mesh.normals = this.normals;
+      mesh.coord0s = this.coord0s;
+      mesh.transformedPositions = this.positions.clone();
+      mesh.transformedBones = (function() {
         var _i, _len, _ref2, _results;
         _ref2 = this.bones;
         _results = [];
@@ -334,16 +440,16 @@
         }
         return _results;
       }).call(this);
+      position = new tdl.buffers.Buffer(this.positions);
+      normal = new tdl.buffers.Buffer(this.normals);
+      coord0 = new tdl.buffers.Buffer(this.coord0s);
       mesh.models = new Array(this.materials.length);
       mesh.materials = new Array(this.materials.length);
       _ref2 = mesh.models;
       for (i = 0, _len = _ref2.length; i < _len; i++) {
         model = _ref2[i];
         arrays = {
-          indices: this.indices[i],
-          position: this.positions,
-          normal: this.normals,
-          coord0: this.coord0s
+          indices: this.indices[i]
         };
         textures = {};
         if (this.materials[i].tex0 != null) {
@@ -353,6 +459,9 @@
           textures.texToon = this.materials[i].texToon;
         }
         mesh.models[i] = new tdl.models.Model(program, arrays, textures);
+        mesh.models[i].buffers.position = position;
+        mesh.models[i].buffers.normal = normal;
+        mesh.models[i].buffers.coord0 = coord0;
         mesh.materials[i] = this.materials[i].clone();
       }
       return mesh;
