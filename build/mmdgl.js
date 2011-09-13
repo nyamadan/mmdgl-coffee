@@ -3,7 +3,19 @@
   if ((_ref = window.MMD_GL) == null) {
     window.MMD_GL = {};
   }
-  MMD_GL.debug = true;
+  MMD_GL.debug = (function() {
+    var f;
+    f = 0.0;
+    return {
+      getCurrFloat: function() {
+        return f;
+      },
+      getNextFloat: function() {
+        f += 1.0;
+        return f;
+      }
+    };
+  })();
   MMD_GL.getWhitePixelTexture = (function() {
     var texture;
     texture = null;
@@ -238,6 +250,8 @@
       this.type = 0;
       this.parentIkIndex = 0;
       this.pos = new Float32Array([0.0, 0.0, 0.0]);
+      this.offset = new Float32Array([0.0, 0.0, 0.0]);
+      this.quaternion = new Float32Array([0.0, 0.0, 0.0, 1.0]);
     }
     Bone.prototype.clone = function() {
       var dst;
@@ -271,7 +285,7 @@
       _ref2 = this.positions.buffer;
       for (i = 0, _len = _ref2.length; i < _len; i++) {
         v = _ref2[i];
-        this.transformedPositions.buffer[i] = v * 0.2;
+        this.transformedPositions.buffer[i] = v * 1.0;
       }
       return gl.bufferData(positionBuffer.target, this.transformedPositions.buffer, gl.DYNAMIC_DRAW);
     };
@@ -285,30 +299,41 @@
       }
     };
     Mesh.prototype.drawBone = function(world, viewProjection) {
-      var bone, boneDir, boneLength, coneModel, midPos, sphereModel, world2, worldViewProjection, x, y, z, _i, _j, _len, _len2, _ref2, _ref3;
+      var bone, boneDir, boneId, boneLength, boneTailPos, coneModel, fast, math, midPos, rotate, rotate_translate, sphereModel, translate, world2, worldViewProjection, x, y, z, _i, _len, _len2, _ref2, _ref3;
+      math = tdl.math;
+      fast = tdl.fast;
       world2 = new Float32Array(world);
+      rotate = new Float32Array(16);
+      translate = new Float32Array(16);
+      rotate_translate = new Float32Array(16);
       worldViewProjection = new Float32Array(16);
       coneModel = MMD_GL.getConeModel();
       sphereModel = MMD_GL.getSphereModel();
+      MMD_GL.debug.getNextFloat();
       coneModel.drawPrep();
       _ref2 = this.bones;
-      for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
-        bone = _ref2[_i];
+      for (boneId = 0, _len = _ref2.length; boneId < _len; boneId++) {
+        bone = _ref2[boneId];
         if (bone.type === 6 || bone.type === 7) {
           continue;
         }
-        boneDir = tdl.math.subVector(this.bones[bone.tailIndex].pos, bone.pos);
-        boneLength = tdl.math.length(boneDir);
-        midPos = tdl.math.mulVectorScalar(tdl.math.addVector(this.bones[bone.tailIndex].pos, bone.pos), 0.5);
-        y = tdl.math.normalize(boneDir);
-        z = tdl.math.normalize(tdl.math.cross([0, 1, 0], y));
-        if (tdl.math.lengthSquared(z) < 0.001) {
+        boneTailPos = math.subVector(this.bones[bone.tailIndex].pos, bone.pos);
+        boneTailPos.push(1.0);
+        fast.matrix4.rotationZ(rotate, MMD_GL.debug.getCurrFloat() * 0.02);
+        boneTailPos = math.rowMajor.mulVectorMatrix4(boneTailPos, rotate);
+        boneTailPos = math.addVector(bone.pos, boneTailPos);
+        boneDir = math.subVector(boneTailPos, bone.pos);
+        boneLength = math.length(boneDir);
+        midPos = math.mulVectorScalar(math.addVector(boneTailPos, bone.pos), 0.5);
+        y = math.normalize(boneDir);
+        z = math.normalize(tdl.math.cross([0, 1, 0], y));
+        if (math.lengthSquared(z) < 0.001) {
           z = [0, 0, 1];
         }
-        x = tdl.math.normalize(tdl.math.cross(y, z));
-        world2 = tdl.math.matrix4.copy(world);
-        world2 = tdl.math.matrix4.mul(new Float32Array([x[0], x[1], x[2], 0, y[0] * boneLength, y[1] * boneLength, y[2] * boneLength, 0, z[0], z[1], z[2], 0, midPos[0], midPos[1], midPos[2], 1]), world2);
-        tdl.fast.matrix4.mul(worldViewProjection, world2, viewProjection);
+        x = math.normalize(math.cross(y, z));
+        world2 = math.matrix4.copy(world);
+        world2 = math.matrix4.mul(new Float32Array([x[0], x[1], x[2], 0, y[0] * boneLength, y[1] * boneLength, y[2] * boneLength, 0, z[0], z[1], z[2], 0, midPos[0], midPos[1], midPos[2], 1]), world2);
+        fast.matrix4.mul(worldViewProjection, world2, viewProjection);
         coneModel.draw({
           color: new Float32Array([0.8, 0.0, 0.0]),
           worldViewProjection: worldViewProjection
@@ -316,8 +341,8 @@
       }
       sphereModel.drawPrep();
       _ref3 = this.bones;
-      for (_j = 0, _len2 = _ref3.length; _j < _len2; _j++) {
-        bone = _ref3[_j];
+      for (_i = 0, _len2 = _ref3.length; _i < _len2; _i++) {
+        bone = _ref3[_i];
         world2 = tdl.math.matrix4.copy(world);
         world2 = tdl.math.matrix4.mul(new Float32Array([0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, bone.pos[0], bone.pos[1], bone.pos[2], 1]), world2);
         tdl.fast.matrix4.mul(worldViewProjection, world2, viewProjection);

@@ -26,6 +26,9 @@ class MMD_GL.Bone
     @type = 0
     @parentIkIndex = 0
     @pos = new Float32Array [0.0, 0.0, 0.0]
+    @offset = new Float32Array [0.0, 0.0, 0.0]
+    @quaternion = new Float32Array [0.0, 0.0, 0.0, 1.0]
+
   clone: ->
     dst = new MMD_GL.Bone
     dst.name = @name
@@ -55,7 +58,7 @@ class MMD_GL.Mesh
     gl.bindBuffer positionBuffer.target, positionBuffer.buffer()
 
     for v, i in @positions.buffer
-      @transformedPositions.buffer[i] = v * 0.2
+      @transformedPositions.buffer[i] = v * 1.0
     gl.bufferData positionBuffer.target, @transformedPositions.buffer, gl.DYNAMIC_DRAW
 
   draw: (prep) ->
@@ -65,28 +68,42 @@ class MMD_GL.Mesh
     return
 
   drawBone: (world, viewProjection) ->
+    math = tdl.math
+    fast = tdl.fast
+ 
     world2 = new Float32Array world
+    rotate = new Float32Array 16
+    translate = new Float32Array 16
+    rotate_translate = new Float32Array 16
     worldViewProjection = new Float32Array 16
 
     coneModel = MMD_GL.getConeModel()
     sphereModel = MMD_GL.getSphereModel()
 
+    MMD_GL.debug.getNextFloat()
     coneModel.drawPrep()
-    for bone in @bones
+    for bone, boneId in @bones
       continue if bone.type == 6 or bone.type == 7
+      # debug info : boneId 18 is armL
 
-      boneDir = tdl.math.subVector(@bones[bone.tailIndex].pos, bone.pos)
-      boneLength = tdl.math.length(boneDir)
-      midPos = tdl.math.mulVectorScalar(tdl.math.addVector(@bones[bone.tailIndex].pos, bone.pos), 0.5)
+      boneTailPos = math.subVector @bones[bone.tailIndex].pos, bone.pos
+      boneTailPos.push 1.0
+      fast.matrix4.rotationZ rotate, MMD_GL.debug.getCurrFloat() * 0.02
+      boneTailPos = math.rowMajor.mulVectorMatrix4 boneTailPos, rotate
+      boneTailPos = math.addVector bone.pos, boneTailPos
 
-      y = tdl.math.normalize boneDir
-      z = tdl.math.normalize tdl.math.cross([0, 1, 0], y)
-      if tdl.math.lengthSquared(z) < 0.001
+      boneDir = math.subVector boneTailPos, bone.pos
+      boneLength = math.length boneDir
+      midPos = math.mulVectorScalar math.addVector(boneTailPos, bone.pos), 0.5
+
+      y = math.normalize boneDir
+      z = math.normalize tdl.math.cross([0, 1, 0], y)
+      if math.lengthSquared(z) < 0.001
         z = [0, 0, 1]
-      x = tdl.math.normalize tdl.math.cross(y, z)
+      x = math.normalize math.cross(y, z)
 
-      world2 = tdl.math.matrix4.copy world
-      world2 = tdl.math.matrix4.mul (new Float32Array [
+      world2 = math.matrix4.copy world
+      world2 = math.matrix4.mul (new Float32Array [
           x[0], x[1], x[2], 0
           y[0] * boneLength, y[1] * boneLength, y[2] * boneLength, 0
           z[0], z[1], z[2], 0
@@ -94,7 +111,7 @@ class MMD_GL.Mesh
         ]),
         world2
 
-      tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
+      fast.matrix4.mul worldViewProjection, world2, viewProjection
 
       coneModel.draw {
         color : new Float32Array [0.8, 0.0, 0.0]

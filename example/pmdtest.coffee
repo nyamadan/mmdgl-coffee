@@ -109,6 +109,7 @@ render = ->
   mesh.drawBone world, viewProjection
   gl.enable gl.DEPTH_TEST
 
+  # stop rotation
   angle += 0.02
   return
 
