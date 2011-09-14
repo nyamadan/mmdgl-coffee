@@ -26,8 +26,8 @@ class MMD_GL.Bone
     @type = 0
     @parentIkIndex = 0
     @pos = new Float32Array [0.0, 0.0, 0.0]
-    @offset = new Float32Array [0.0, 0.0, 0.0]
-    @quaternion = new Float32Array [0.0, 0.0, 0.0, 1.0]
+    @offsetPos = null
+    @localTransform = tdl.math.matrix4.identity()
 
   clone: ->
     dst = new MMD_GL.Bone
@@ -37,6 +37,7 @@ class MMD_GL.Bone
     dst.type = @type
     dst.parentIkIndex = @parentIkIndex
     dst.pos = new Float32Array @pos
+    dst.localTransform = new Float32Array @localTransform
     dst
 
 class MMD_GL.Mesh
@@ -51,7 +52,6 @@ class MMD_GL.Mesh
     @transformedPositions = null
 
     @bones = null
-    @transformedBones = null
 
   transform: ->
     positionBuffer = @models[0].buffers.position
@@ -60,6 +60,9 @@ class MMD_GL.Mesh
     for v, i in @positions.buffer
       @transformedPositions.buffer[i] = v * 1.0
     gl.bufferData positionBuffer.target, @transformedPositions.buffer, gl.DYNAMIC_DRAW
+
+  getBoneTransform: (bone) ->
+    return if bone.parentIndex is 0xFFFF then bone.localTransform else tdl.math.matrix4.mul bone.localTransform, @getBoneTransform(@bones[bone.parentIndex])
 
   draw: (prep) ->
     for model, i in @models
@@ -80,21 +83,18 @@ class MMD_GL.Mesh
     coneModel = MMD_GL.getConeModel()
     sphereModel = MMD_GL.getSphereModel()
 
-    MMD_GL.debug.getNextFloat()
+    @bones[18].localTransform[12] = 5.0
     coneModel.drawPrep()
     for bone, boneId in @bones
       continue if bone.type == 6 or bone.type == 7
       # debug info : boneId 18 is armL
 
-      boneTailPos = math.subVector @bones[bone.tailIndex].pos, bone.pos
-      boneTailPos.push 1.0
-      fast.matrix4.rotationZ rotate, MMD_GL.debug.getCurrFloat() * 0.02
-      boneTailPos = math.rowMajor.mulVectorMatrix4 boneTailPos, rotate
-      boneTailPos = math.addVector bone.pos, boneTailPos
+      bonePos = tdl.math.columnMajor.column @getBoneTransform(bone), 3
+      boneTailPos = math.addVector bonePos, math.subVector(tdl.math.columnMajor.column(@getBoneTransform(@bones[bone.tailIndex]), 3), bonePos)
 
-      boneDir = math.subVector boneTailPos, bone.pos
+      boneDir = math.subVector boneTailPos, bonePos
       boneLength = math.length boneDir
-      midPos = math.mulVectorScalar math.addVector(boneTailPos, bone.pos), 0.5
+      midPos = math.mulVectorScalar math.addVector(boneTailPos, bonePos), 0.5
 
       y = math.normalize boneDir
       z = math.normalize tdl.math.cross([0, 1, 0], y)
@@ -121,13 +121,8 @@ class MMD_GL.Mesh
     sphereModel.drawPrep()
     for bone in @bones
       world2 = tdl.math.matrix4.copy world
-      world2 = tdl.math.matrix4.mul (new Float32Array [
-          0.5, 0, 0, 0
-          0, 0.5, 0, 0
-          0, 0, 0.5, 0
-          bone.pos[0], bone.pos[1], bone.pos[2], 1
-        ]),
-        world2
+      world2 = tdl.math.matrix4.mul @getBoneTransform(bone), world2
+      world2 = tdl.math.matrix4.mul tdl.math.matrix4.scaling([0.5, 0.5, 0.5]), world2
 
       tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
 
@@ -135,7 +130,6 @@ class MMD_GL.Mesh
         color : new Float32Array [0.8, 0.8, 0.8]
         worldViewProjection : worldViewProjection
       }
-
     return
 
 class MMD_GL.PMD
@@ -242,7 +236,13 @@ class MMD_GL.PMD
       bone.parentIkIndex = (bin.readUint16 1)[0]
       bone.pos = (bin.readFloat32 3)
       bone.pos[2] = -bone.pos[2]
+
+      bone.localTransform = null
       @bones[i] = bone
+
+    for bone, i in @bones
+      bone.offsetPos = new Float32Array tdl.math.subVector bone.pos, if bone.parentIndex isnt 0xffff then @bones[bone.parentIndex].pos else [0.0, 0.0, 0.0]
+      bone.localTransform = tdl.math.matrix4.translation bone.offsetPos
     return
 
   createMesh: ->
@@ -261,7 +261,7 @@ class MMD_GL.PMD
 
     # clone of positions and bones
     mesh.transformedPositions = @positions.clone()
-    mesh.transformedBones = ( bone.clone() for bone in @bones)
+    mesh.bones = ( bone.clone() for bone in @bones)
 
     # create webgl buffers
     position = new tdl.buffers.Buffer @positions
