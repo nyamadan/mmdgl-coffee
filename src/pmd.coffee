@@ -37,6 +37,7 @@ class MMD_GL.Bone
     dst.type = @type
     dst.parentIkIndex = @parentIkIndex
     dst.pos = new Float32Array @pos
+    dst.offsetPos = new Float32Array @offsetPos
     dst.localTransform = new Float32Array @localTransform
     dst
 
@@ -62,7 +63,15 @@ class MMD_GL.Mesh
     gl.bufferData positionBuffer.target, @transformedPositions.buffer, gl.DYNAMIC_DRAW
 
   getBoneTransform: (bone) ->
-    return if bone.parentIndex is 0xFFFF then bone.localTransform else tdl.math.matrix4.mul bone.localTransform, @getBoneTransform(@bones[bone.parentIndex])
+    mulMat = tdl.math.matrix4.mul
+    transMat = tdl.math.matrix4.translation
+
+    localTransform = bone.localTransform
+
+    if bone.parentIndex is 0xFFFF
+      return mulMat localTransform, transMat(bone.offsetPos)
+
+    return mulMat(localTransform, mulMat(transMat(bone.offsetPos), @getBoneTransform(@bones[bone.parentIndex])))
 
   draw: (prep) ->
     for model, i in @models
@@ -75,15 +84,14 @@ class MMD_GL.Mesh
     fast = tdl.fast
  
     world2 = new Float32Array world
-    rotate = new Float32Array 16
-    translate = new Float32Array 16
-    rotate_translate = new Float32Array 16
     worldViewProjection = new Float32Array 16
 
     coneModel = MMD_GL.getConeModel()
     sphereModel = MMD_GL.getSphereModel()
 
-    @bones[18].localTransform[12] = 5.0
+    MMD_GL.debug.getNextFloat()
+    @bones[18].localTransform = math.matrix4.rotationX MMD_GL.debug.getCurrFloat() * 0.1
+    @bones[19].localTransform = math.matrix4.rotationX MMD_GL.debug.getCurrFloat() * 0.1
     coneModel.drawPrep()
     for bone, boneId in @bones
       continue if bone.type == 6 or bone.type == 7
@@ -185,7 +193,7 @@ class MMD_GL.PMD
 
     # read materials
     @materials = new Array (bin.readUint32 1)[0]
-    @indices = new Array this.materials.length
+    @indices = new Array @materials.length
 
     texturePath = ''
     toonIndex = null
@@ -242,7 +250,7 @@ class MMD_GL.PMD
 
     for bone, i in @bones
       bone.offsetPos = new Float32Array tdl.math.subVector bone.pos, if bone.parentIndex isnt 0xffff then @bones[bone.parentIndex].pos else [0.0, 0.0, 0.0]
-      bone.localTransform = tdl.math.matrix4.translation bone.offsetPos
+      bone.localTransform = tdl.math.matrix4.identity()
     return
 
   createMesh: ->

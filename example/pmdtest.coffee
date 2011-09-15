@@ -110,7 +110,7 @@ render = ->
   gl.enable gl.DEPTH_TEST
 
   # stop rotation
-  angle += 0.02
+  angle += 0.01
   return
 
 # Bootstrap

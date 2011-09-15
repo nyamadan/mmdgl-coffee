@@ -262,6 +262,7 @@
       dst.type = this.type;
       dst.parentIkIndex = this.parentIkIndex;
       dst.pos = new Float32Array(this.pos);
+      dst.offsetPos = new Float32Array(this.offsetPos);
       dst.localTransform = new Float32Array(this.localTransform);
       return dst;
     };
@@ -290,11 +291,14 @@
       return gl.bufferData(positionBuffer.target, this.transformedPositions.buffer, gl.DYNAMIC_DRAW);
     };
     Mesh.prototype.getBoneTransform = function(bone) {
+      var localTransform, mulMat, transMat;
+      mulMat = tdl.math.matrix4.mul;
+      transMat = tdl.math.matrix4.translation;
+      localTransform = bone.localTransform;
       if (bone.parentIndex === 0xFFFF) {
-        return bone.localTransform;
-      } else {
-        return tdl.math.matrix4.mul(bone.localTransform, this.getBoneTransform(this.bones[bone.parentIndex]));
+        return mulMat(localTransform, transMat(bone.offsetPos));
       }
+      return mulMat(localTransform, mulMat(transMat(bone.offsetPos), this.getBoneTransform(this.bones[bone.parentIndex])));
     };
     Mesh.prototype.draw = function(prep) {
       var i, model, _len, _ref2;
@@ -306,17 +310,16 @@
       }
     };
     Mesh.prototype.drawBone = function(world, viewProjection) {
-      var bone, boneDir, boneId, boneLength, bonePos, boneTailPos, coneModel, fast, math, midPos, rotate, rotate_translate, sphereModel, translate, world2, worldViewProjection, x, y, z, _i, _len, _len2, _ref2, _ref3;
+      var bone, boneDir, boneId, boneLength, bonePos, boneTailPos, coneModel, fast, math, midPos, sphereModel, world2, worldViewProjection, x, y, z, _i, _len, _len2, _ref2, _ref3;
       math = tdl.math;
       fast = tdl.fast;
       world2 = new Float32Array(world);
-      rotate = new Float32Array(16);
-      translate = new Float32Array(16);
-      rotate_translate = new Float32Array(16);
       worldViewProjection = new Float32Array(16);
       coneModel = MMD_GL.getConeModel();
       sphereModel = MMD_GL.getSphereModel();
-      this.bones[18].localTransform[12] = 5.0;
+      MMD_GL.debug.getNextFloat();
+      this.bones[18].localTransform = math.matrix4.rotationX(MMD_GL.debug.getCurrFloat() * 0.1);
+      this.bones[19].localTransform = math.matrix4.rotationX(MMD_GL.debug.getCurrFloat() * 0.1);
       coneModel.drawPrep();
       _ref2 = this.bones;
       for (boneId = 0, _len = _ref2.length; boneId < _len; boneId++) {
@@ -449,7 +452,7 @@
       for (i = 0, _len2 = _ref4.length; i < _len2; i++) {
         bone = _ref4[i];
         bone.offsetPos = new Float32Array(tdl.math.subVector(bone.pos, bone.parentIndex !== 0xffff ? this.bones[bone.parentIndex].pos : [0.0, 0.0, 0.0]));
-        bone.localTransform = tdl.math.matrix4.translation(bone.offsetPos);
+        bone.localTransform = tdl.math.matrix4.identity();
       }
       return;
     }

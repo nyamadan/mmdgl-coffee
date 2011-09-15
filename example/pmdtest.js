@@ -85,7 +85,7 @@
     gl.disable(gl.DEPTH_TEST);
     mesh.drawBone(world, viewProjection);
     gl.enable(gl.DEPTH_TEST);
-    angle += 0.02;
+    angle += 0.01;
   };
   $(function() {
     canvas = document.createElement('canvas');
