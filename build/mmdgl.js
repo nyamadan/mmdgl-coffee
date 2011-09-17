@@ -251,6 +251,8 @@
       this.parentIkIndex = 0;
       this.pos = new Float32Array([0.0, 0.0, 0.0]);
       this.offsetPos = null;
+      this.invTransform = null;
+      this.transform = null;
       this.localTransform = tdl.math.matrix4.identity();
     }
     Bone.prototype.clone = function() {
@@ -262,8 +264,10 @@
       dst.type = this.type;
       dst.parentIkIndex = this.parentIkIndex;
       dst.pos = new Float32Array(this.pos);
-      dst.offsetPos = new Float32Array(this.offsetPos);
-      dst.localTransform = new Float32Array(this.localTransform);
+      dst.offsetPos = this.offsetPos != null ? new Float32Array(this.offsetPos) : null;
+      dst.invTransform = this.invTransform != null ? new Float32Array(this.invTransform) : null;
+      dst.transform = this.transform != null ? new Float32Array(this.transform) : null;
+      dst.localTransform = this.localTransform != null ? new Float32Array(this.localTransform) : null;
       return dst;
     };
     return Bone;
@@ -280,25 +284,90 @@
       this.bones = null;
     }
     Mesh.prototype.transform = function() {
-      var i, positionBuffer, v, _len, _ref2;
+      var bone0, bone0W, bone1, bone1W, boneII, d, i, j, mat, matInvPosition, matInvPosition0, matInvPosition1, matTransform, matTransform0, matTransform1, pos, posI, positionBuffer, v0, v1, v2, _ref2;
+      this.updateAllBoneTransform();
       positionBuffer = this.models[0].buffers.position;
-      gl.bindBuffer(positionBuffer.target, positionBuffer.buffer());
-      _ref2 = this.positions.buffer;
-      for (i = 0, _len = _ref2.length; i < _len; i++) {
-        v = _ref2[i];
-        this.transformedPositions.buffer[i] = v * 1.0;
+      pos = new Float32Array(3);
+      mat = tdl.fast.matrix4.identity(new Float32Array(16));
+      matTransform = tdl.fast.matrix4.identity(new Float32Array(16));
+      matTransform0 = tdl.fast.matrix4.identity(new Float32Array(16));
+      matTransform1 = tdl.fast.matrix4.identity(new Float32Array(16));
+      matInvPosition = tdl.fast.matrix4.identity(new Float32Array(16));
+      matInvPosition0 = tdl.fast.matrix4.identity(new Float32Array(16));
+      matInvPosition1 = tdl.fast.matrix4.identity(new Float32Array(16));
+      for (i = 0, _ref2 = this.positions.numElements; 0 <= _ref2 ? i < _ref2 : i > _ref2; 0 <= _ref2 ? i++ : i--) {
+        posI = i * 3;
+        boneII = i * 2;
+        bone0 = this.bones[this.boneIndices.buffer[boneII + 0]];
+        bone1 = this.bones[this.boneIndices.buffer[boneII + 1]];
+        bone0W = this.boneWeights.buffer[i];
+        bone1W = 1.0 - bone0W;
+        tdl.fast.mulScalarMatrix(matTransform0, bone0W, bone0.transform);
+        tdl.fast.mulScalarMatrix(matTransform1, bone1W, bone1.transform);
+        for (j = 0; j < 16; j++) {
+          matTransform[j] = matTransform0[j] + matTransform1[j];
+        }
+        tdl.fast.matrix4.identity(matInvPosition0);
+        tdl.fast.matrix4.identity(matInvPosition1);
+        for (j = 0; j < 3; j++) {
+          matInvPosition0[12 + j] = -bone0.pos[j];
+        }
+        for (j = 0; j < 3; j++) {
+          matInvPosition1[12 + j] = -bone1.pos[j];
+        }
+        for (j = 0; j < 16; j++) {
+          matInvPosition0[j] = matInvPosition0[j] * bone0W;
+        }
+        for (j = 0; j < 16; j++) {
+          matInvPosition1[j] = matInvPosition1[j] * bone1W;
+        }
+        for (j = 0; j < 16; j++) {
+          matInvPosition[j] = matInvPosition0[j] + matInvPosition1[j];
+        }
+        tdl.fast.matrix4.mul(mat, matInvPosition, matTransform);
+        v0 = this.positions.buffer[posI + 0];
+        v1 = this.positions.buffer[posI + 1];
+        v2 = this.positions.buffer[posI + 2];
+        d = v0 * mat[0 * 4 + 3] + v1 * mat[1 * 4 + 3] + v2 * mat[2 * 4 + 3] + mat[3 * 4 + 3];
+        pos[0] = v0 * mat[0 * 4 + 0] + v1 * mat[1 * 4 + 0] + v2 * mat[2 * 4 + 0] + mat[3 * 4 + 0];
+        pos[1] = v0 * mat[0 * 4 + 1] + v1 * mat[1 * 4 + 1] + v2 * mat[2 * 4 + 1] + mat[3 * 4 + 1];
+        pos[2] = v0 * mat[0 * 4 + 2] + v1 * mat[1 * 4 + 2] + v2 * mat[2 * 4 + 2] + mat[3 * 4 + 2];
+        this.transformedPositions.buffer.set(pos, posI);
       }
+      gl.bindBuffer(positionBuffer.target, positionBuffer.buffer());
       return gl.bufferData(positionBuffer.target, this.transformedPositions.buffer, gl.DYNAMIC_DRAW);
     };
-    Mesh.prototype.getBoneTransform = function(bone) {
-      var localTransform, mulMat, transMat;
-      mulMat = tdl.math.matrix4.mul;
-      transMat = tdl.math.matrix4.translation;
-      localTransform = bone.localTransform;
-      if (bone.parentIndex === 0xFFFF) {
-        return mulMat(localTransform, transMat(bone.offsetPos));
+    Mesh.prototype.updateAllBoneTransform = function() {
+      var bone, _i, _len, _ref2;
+      MMD_GL.debug.getNextFloat();
+      this.bones[18].localTransform = new Float32Array(tdl.math.matrix4.rotationX(MMD_GL.debug.getCurrFloat() * 0.1));
+      this.bones[48].localTransform = new Float32Array(tdl.math.matrix4.rotationX(MMD_GL.debug.getCurrFloat() * -0.1));
+      _ref2 = this.bones;
+      for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+        bone = _ref2[_i];
+        this.updateBoneTransform(bone);
       }
-      return mulMat(localTransform, mulMat(transMat(bone.offsetPos), this.getBoneTransform(this.bones[bone.parentIndex])));
+      return this.bones;
+    };
+    Mesh.prototype.updateBoneTransform = function(bone) {
+      var copyMat, mat, matOffset, mulMat, origBone, transMat;
+      mulMat = tdl.fast.matrix4.mul;
+      transMat = tdl.fast.matrix4.translation;
+      copyMat = tdl.fast.copyMatrix;
+      origBone = bone;
+      mat = tdl.fast.matrix4.identity(new Float32Array(16));
+      matOffset = tdl.fast.matrix4.identity(new Float32Array(16));
+      while (bone.parentIndex !== 0xFFFF) {
+        mulMat(mat, mat, bone.localTransform);
+        transMat(matOffset, bone.offsetPos);
+        mulMat(mat, mat, matOffset);
+        bone = this.bones[bone.parentIndex];
+      }
+      mulMat(mat, mat, bone.localTransform);
+      transMat(matOffset, bone.offsetPos);
+      mulMat(mat, mat, matOffset);
+      origBone.transform = mat;
+      return origBone;
     };
     Mesh.prototype.draw = function(prep) {
       var i, model, _len, _ref2;
@@ -310,16 +379,13 @@
       }
     };
     Mesh.prototype.drawBone = function(world, viewProjection) {
-      var bone, boneDir, boneId, boneLength, bonePos, boneTailPos, coneModel, fast, math, midPos, sphereModel, world2, worldViewProjection, x, y, z, _i, _len, _len2, _ref2, _ref3;
+      var bone, boneDir, boneId, boneLength, bonePos, boneTailPos, coneModel, fast, math, midPos, sphereModel, world2, worldViewProjection, x, y, z, _len, _ref2;
       math = tdl.math;
       fast = tdl.fast;
       world2 = new Float32Array(world);
       worldViewProjection = new Float32Array(16);
       coneModel = MMD_GL.getConeModel();
       sphereModel = MMD_GL.getSphereModel();
-      MMD_GL.debug.getNextFloat();
-      this.bones[18].localTransform = math.matrix4.rotationX(MMD_GL.debug.getCurrFloat() * 0.1);
-      this.bones[19].localTransform = math.matrix4.rotationX(MMD_GL.debug.getCurrFloat() * 0.1);
       coneModel.drawPrep();
       _ref2 = this.bones;
       for (boneId = 0, _len = _ref2.length; boneId < _len; boneId++) {
@@ -327,8 +393,8 @@
         if (bone.type === 6 || bone.type === 7) {
           continue;
         }
-        bonePos = tdl.math.columnMajor.column(this.getBoneTransform(bone), 3);
-        boneTailPos = math.addVector(bonePos, math.subVector(tdl.math.columnMajor.column(this.getBoneTransform(this.bones[bone.tailIndex]), 3), bonePos));
+        bonePos = tdl.math.matrix4.transformVector4(bone.transform, [0, 0, 0, 1]);
+        boneTailPos = math.addVector(bonePos, math.subVector(tdl.math.matrix4.transformVector4(this.bones[bone.tailIndex].transform, [0, 0, 0, 1]), bonePos));
         boneDir = math.subVector(boneTailPos, bonePos);
         boneLength = math.length(boneDir);
         midPos = math.mulVectorScalar(math.addVector(boneTailPos, bonePos), 0.5);
@@ -343,19 +409,6 @@
         fast.matrix4.mul(worldViewProjection, world2, viewProjection);
         coneModel.draw({
           color: new Float32Array([0.8, 0.0, 0.0]),
-          worldViewProjection: worldViewProjection
-        });
-      }
-      sphereModel.drawPrep();
-      _ref3 = this.bones;
-      for (_i = 0, _len2 = _ref3.length; _i < _len2; _i++) {
-        bone = _ref3[_i];
-        world2 = tdl.math.matrix4.copy(world);
-        world2 = tdl.math.matrix4.mul(this.getBoneTransform(bone), world2);
-        world2 = tdl.math.matrix4.mul(tdl.math.matrix4.scaling([0.5, 0.5, 0.5]), world2);
-        tdl.fast.matrix4.mul(worldViewProjection, world2, viewProjection);
-        sphereModel.draw({
-          color: new Float32Array([0.8, 0.8, 0.8]),
           worldViewProjection: worldViewProjection
         });
       }

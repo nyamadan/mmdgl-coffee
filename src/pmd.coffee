@@ -27,6 +27,8 @@ class MMD_GL.Bone
     @parentIkIndex = 0
     @pos = new Float32Array [0.0, 0.0, 0.0]
     @offsetPos = null
+    @invTransform = null
+    @transform = null
     @localTransform = tdl.math.matrix4.identity()
 
   clone: ->
@@ -37,8 +39,10 @@ class MMD_GL.Bone
     dst.type = @type
     dst.parentIkIndex = @parentIkIndex
     dst.pos = new Float32Array @pos
-    dst.offsetPos = new Float32Array @offsetPos
-    dst.localTransform = new Float32Array @localTransform
+    dst.offsetPos = if @offsetPos? then new Float32Array @offsetPos else null
+    dst.invTransform = if @invTransform? then new Float32Array @invTransform else null
+    dst.transform = if @transform? then new Float32Array @transform else null
+    dst.localTransform = if @localTransform? then new Float32Array @localTransform else null
     dst
 
 class MMD_GL.Mesh
@@ -55,23 +59,88 @@ class MMD_GL.Mesh
     @bones = null
 
   transform: ->
-    positionBuffer = @models[0].buffers.position
-    gl.bindBuffer positionBuffer.target, positionBuffer.buffer()
+    @updateAllBoneTransform()
 
-    for v, i in @positions.buffer
-      @transformedPositions.buffer[i] = v * 1.0
+    positionBuffer = @models[0].buffers.position
+
+    pos = new Float32Array 3
+    mat = tdl.fast.matrix4.identity(new Float32Array 16)
+    matTransform = tdl.fast.matrix4.identity(new Float32Array 16)
+    matTransform0 = tdl.fast.matrix4.identity(new Float32Array 16)
+    matTransform1 = tdl.fast.matrix4.identity(new Float32Array 16)
+    matInvPosition = tdl.fast.matrix4.identity(new Float32Array 16)
+    matInvPosition0 = tdl.fast.matrix4.identity(new Float32Array 16)
+    matInvPosition1 = tdl.fast.matrix4.identity(new Float32Array 16)
+
+    for i in [0...@positions.numElements]
+      posI = i * 3
+      boneII = i * 2
+
+      bone0 = @bones[@boneIndices.buffer[boneII + 0]]
+      bone1 = @bones[@boneIndices.buffer[boneII + 1]]
+      bone0W = @boneWeights.buffer[i]
+      bone1W = 1.0 - bone0W
+
+      tdl.fast.mulScalarMatrix matTransform0, bone0W, bone0.transform
+      tdl.fast.mulScalarMatrix matTransform1, bone1W, bone1.transform
+      matTransform[j] = matTransform0[j] + matTransform1[j] for j in [0...16]
+
+      tdl.fast.matrix4.identity matInvPosition0
+      tdl.fast.matrix4.identity matInvPosition1
+      matInvPosition0[12 + j] = -bone0.pos[j] for j in [0...3]
+      matInvPosition1[12 + j] = -bone1.pos[j] for j in [0...3]
+      matInvPosition0[j] = matInvPosition0[j] * bone0W for j in [0...16]
+      matInvPosition1[j] = matInvPosition1[j] * bone1W for j in [0...16]
+      matInvPosition[j] = matInvPosition0[j] + matInvPosition1[j] for j in [0...16]
+
+      tdl.fast.matrix4.mul mat, matInvPosition, matTransform
+
+      # update transformed pos
+      v0 = @positions.buffer[posI + 0]
+      v1 = @positions.buffer[posI + 1]
+      v2 = @positions.buffer[posI + 2]
+      d =  v0 * mat[0*4+3] + v1 * mat[1*4+3] + v2 * mat[2*4+3] + mat[3*4+3]
+      pos[0] = v0 * mat[0*4+0] + v1 * mat[1*4+0] + v2 * mat[2*4+0] + mat[3*4+0]
+      pos[1] = v0 * mat[0*4+1] + v1 * mat[1*4+1] + v2 * mat[2*4+1] + mat[3*4+1]
+      pos[2] = v0 * mat[0*4+2] + v1 * mat[1*4+2] + v2 * mat[2*4+2] + mat[3*4+2]
+      @transformedPositions.buffer.set pos, posI
+
+    # update position buffer
+    gl.bindBuffer positionBuffer.target, positionBuffer.buffer()
     gl.bufferData positionBuffer.target, @transformedPositions.buffer, gl.DYNAMIC_DRAW
 
-  getBoneTransform: (bone) ->
-    mulMat = tdl.math.matrix4.mul
-    transMat = tdl.math.matrix4.translation
+  updateAllBoneTransform: () ->
+    # Debug : transform bones
+    MMD_GL.debug.getNextFloat()
+    @bones[18].localTransform = new Float32Array(tdl.math.matrix4.rotationX MMD_GL.debug.getCurrFloat() * 0.1)
+    @bones[48].localTransform = new Float32Array(tdl.math.matrix4.rotationX MMD_GL.debug.getCurrFloat() * -0.1)
 
-    localTransform = bone.localTransform
+    @updateBoneTransform bone for bone in @bones
+    return @bones
 
-    if bone.parentIndex is 0xFFFF
-      return mulMat localTransform, transMat(bone.offsetPos)
+  updateBoneTransform: (bone) ->
+    mulMat = tdl.fast.matrix4.mul
+    transMat = tdl.fast.matrix4.translation
+    copyMat = tdl.fast.copyMatrix
 
-    return mulMat(localTransform, mulMat(transMat(bone.offsetPos), @getBoneTransform(@bones[bone.parentIndex])))
+    origBone = bone
+
+    mat = tdl.fast.matrix4.identity(new Float32Array 16)
+    matOffset = tdl.fast.matrix4.identity(new Float32Array 16)
+
+    while bone.parentIndex isnt 0xFFFF
+      mulMat mat, mat, bone.localTransform
+      transMat matOffset, bone.offsetPos
+      mulMat mat, mat, matOffset
+      bone = @bones[bone.parentIndex]
+
+    mulMat mat, mat, bone.localTransform
+    transMat matOffset, bone.offsetPos
+    mulMat mat, mat, matOffset
+
+    origBone.transform = mat
+    # origBone.invTransform = tdl.fast.matrix4.inverse new Float32Array(16), mat
+    return origBone
 
   draw: (prep) ->
     for model, i in @models
@@ -89,16 +158,13 @@ class MMD_GL.Mesh
     coneModel = MMD_GL.getConeModel()
     sphereModel = MMD_GL.getSphereModel()
 
-    MMD_GL.debug.getNextFloat()
-    @bones[18].localTransform = math.matrix4.rotationX MMD_GL.debug.getCurrFloat() * 0.1
-    @bones[19].localTransform = math.matrix4.rotationX MMD_GL.debug.getCurrFloat() * 0.1
     coneModel.drawPrep()
     for bone, boneId in @bones
       continue if bone.type == 6 or bone.type == 7
       # debug info : boneId 18 is armL
 
-      bonePos = tdl.math.columnMajor.column @getBoneTransform(bone), 3
-      boneTailPos = math.addVector bonePos, math.subVector(tdl.math.columnMajor.column(@getBoneTransform(@bones[bone.tailIndex]), 3), bonePos)
+      bonePos = tdl.math.matrix4.transformVector4(bone.transform, [0, 0, 0, 1])
+      boneTailPos = math.addVector bonePos, math.subVector(tdl.math.matrix4.transformVector4(@bones[bone.tailIndex].transform, [0, 0, 0, 1]), bonePos)
 
       boneDir = math.subVector boneTailPos, bonePos
       boneLength = math.length boneDir
@@ -126,18 +192,18 @@ class MMD_GL.Mesh
         worldViewProjection : worldViewProjection
       }
 
-    sphereModel.drawPrep()
-    for bone in @bones
-      world2 = tdl.math.matrix4.copy world
-      world2 = tdl.math.matrix4.mul @getBoneTransform(bone), world2
-      world2 = tdl.math.matrix4.mul tdl.math.matrix4.scaling([0.5, 0.5, 0.5]), world2
-
-      tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
-
-      sphereModel.draw {
-        color : new Float32Array [0.8, 0.8, 0.8]
-        worldViewProjection : worldViewProjection
-      }
+#    sphereModel.drawPrep()
+#    for bone in @bones
+#      world2 = tdl.math.matrix4.copy world
+#      world2 = tdl.math.matrix4.mul bone.transform, world2
+#      world2 = tdl.math.matrix4.mul tdl.math.matrix4.scaling([0.5, 0.5, 0.5]), world2
+#
+#      tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
+#
+#      sphereModel.draw {
+#        color : new Float32Array [0.8, 0.8, 0.8]
+#        worldViewProjection : worldViewProjection
+#      }
     return
 
 class MMD_GL.PMD
