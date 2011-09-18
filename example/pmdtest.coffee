@@ -1,6 +1,4 @@
 class Http
-  constructor: ->
-    
   getBinary: (uri) ->
     deferred = new Deferred
     xhr = new XMLHttpRequest
@@ -52,6 +50,24 @@ coneModel = null
 
 angle = 0.0
 
+start = () ->
+  MMD_GL.debug.putsGLparam()
+
+  # Wait for load materials
+  Deferred.next ->
+    (http.getBinary 'miku.pmd').next (xhr) ->
+      bin = new MMD_GL.Binary xhr.responseText
+      pmd = new MMD_GL.PMD bin
+      mesh = pmd.createMesh()
+      
+      program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']
+      throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
+  # main loop
+  .next ->
+      mainLoop()
+  .error (e) ->
+    alert e
+
 # main loop function.
 mainLoop = () ->
   tdl.webgl.requestAnimationFrame mainLoop, canvas
@@ -81,8 +97,6 @@ render = ->
     [0, 10, 0],
     [0, 1, 0]
 
-  tdl.fast.matrix4.mul viewProjection, view, projection
-
   # Start GL
   gl.depthMask true
   gl.clearColor 0, 0, 0, 1.0
@@ -93,23 +107,23 @@ render = ->
   gl.enable gl.DEPTH_TEST
   
   tdl.fast.matrix4.rotationY world, angle
-  tdl.fast.matrix4.mul worldViewProjection, world, viewProjection
 
   mesh.transform()
 
   prep =
     world               : world
-    worldViewProjection : worldViewProjection
+    view                : view
+    projection          : projection
     dlColor             : new Float32Array [1.0, 1.0, 1.0]
     dlDirection         : new Float32Array [0, 0, -1.0]
     eyeVec              : new Float32Array [0.0, 0.0, -1.0]
 
   mesh.draw prep
   gl.disable gl.DEPTH_TEST
-  mesh.drawBone world, viewProjection
+  mesh.drawBone world, view, projection
   gl.enable gl.DEPTH_TEST
 
-  # stop rotation
+  # rotation
   angle += 0.01
   return
 
@@ -137,18 +151,5 @@ $ ->
   # Add element to document
   document.body.appendChild canvas
 
-  # Wait for load materials
-  Deferred.next ->
-    (http.getBinary 'miku.pmd').next (xhr) ->
-      bin = new MMD_GL.Binary xhr.responseText
-      pmd = new MMD_GL.PMD bin
-      mesh = pmd.createMesh()
-      
-      program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']
-      throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
-
-      mainLoop()
-  .next ->
-    console.log 'next operation'
-  .error (e) ->
-    alert e
+  # start app
+  start()

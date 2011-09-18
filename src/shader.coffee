@@ -27,40 +27,100 @@ MMD_GL.vertexShaderScript =
   toon0:
     '''
     uniform mat4 world;
-    uniform mat4 worldViewProjection;
+    uniform mat4 view;
+    uniform mat4 projection;
+
+    uniform sampler2D texBone;
     
     attribute vec3 position;
     attribute vec3 normal;
     attribute vec2 coord0;
+
+    attribute vec2 boneIndices;
+    attribute float boneWeights;
 
     varying vec4 vPosition;
     varying vec4 vNormal;
     varying vec2 vCoord0;
     
     void main() {
+        vec4 v0; vec4 v1; vec4 v2; vec4 v3;
+        float halfSize = 1.0 / 512.0;
+        vec2 bone0 = vec2(boneIndices.x, 0.0);
+        vec2 bone1 = vec2(boneIndices.y, 0.0);
+        bone0.x = (bone0.x * 2.0 + 1.0) * halfSize;
+        bone1.x = (bone1.x * 2.0 + 1.0) * halfSize;
+        bone0.y = (bone0.y * 8.0 + 1.0) * halfSize;
+        bone1.y = (bone1.y * 8.0 + 1.0) * halfSize;
+        v0 = texture2D(texBone, vec2(bone0.x, bone0.y + 0.0 * halfSize));
+        v1 = texture2D(texBone, vec2(bone0.x, bone0.y + 2.0 * halfSize));
+        v2 = texture2D(texBone, vec2(bone0.x, bone0.y + 4.0 * halfSize));
+        v3 = texture2D(texBone, vec2(bone0.x, bone0.y + 6.0* halfSize));
+        mat4 mBone0 = mat4(v0, v1, v2, v3);
+
+        v0 = texture2D(texBone, vec2(bone1.x, bone1.y + 0.0 * halfSize));
+        v1 = texture2D(texBone, vec2(bone1.x, bone1.y + 2.0 * halfSize));
+        v2 = texture2D(texBone, vec2(bone1.x, bone1.y + 4.0 * halfSize));
+        v3 = texture2D(texBone, vec2(bone1.x, bone1.y + 6.0 * halfSize));
+        mat4 mBone1 = mat4(v0, v1, v2, v3);
+
+        mat4 mBone = mBone0 * boneWeights + mBone1 * (1.0 - boneWeights);
+
+        v0 = texture2D(texBone, vec2(bone0.x, bone0.y + 8.0 * halfSize));
+        v1 = texture2D(texBone, vec2(bone0.x, bone0.y + 10.0 * halfSize));
+        v2 = texture2D(texBone, vec2(bone0.x, bone0.y + 12.0 *  halfSize));
+        v3 = texture2D(texBone, vec2(bone0.x, bone0.y + 14.0 * halfSize));
+        mat4 mInv0 = mat4(v0, v1, v2, v3);
+
+        v0 = texture2D(texBone, vec2(bone1.x, bone1.y + 8.0 * halfSize));
+        v1 = texture2D(texBone, vec2(bone1.x, bone1.y + 10.0 * halfSize));
+        v2 = texture2D(texBone, vec2(bone1.x, bone1.y + 12.0 * halfSize));
+        v3 = texture2D(texBone, vec2(bone1.x, bone1.y + 14.0 * halfSize));
+        mat4 mInv1 = mat4(v0, v1, v2, v3);
+        mat4 mInv = mInv0 * boneWeights + mInv1 * (1.0 - boneWeights);
 
         vPosition = world * vec4(position, 1.0);
 
         vNormal = vec4((world * vec4(normal + position, 1.0)).xyz - vPosition.xyz, 1.0);
-        
         vCoord0 = coord0;
 
-        gl_Position = worldViewProjection * vec4(position, 1.0);
+        gl_Position = projection * view * world * mBone * mInv * vec4(position, 1.0);
     }
     '''
  
   color0:
     '''
-    uniform mat4 worldViewProjection;
-    
+    uniform mat4 world;
+    uniform mat4 view;
+    uniform mat4 projection;
     attribute vec3 position;
     
     void main() {
-        gl_Position = worldViewProjection * vec4(position, 1.0);
+        gl_Position = projection * view * world * vec4(position, 1.0);
     }
     '''
 
-MMD_GL.fragmentShaderScript = 
+  bone0:
+    '''
+    uniform vec2 boneIndex;
+    uniform mat4 boneMatrix;
+    
+    attribute float colIndex;
+    attribute vec3 position;
+
+    varying vec4 vColor;
+
+    void main() {
+        float x = 0.0;
+        float y = 0.0;
+        x = -1.0 + (position.x + boneIndex.x + 0.5) / 128.0;
+        y = -1.0 + (position.y + boneIndex.y * 4.0 + 0.5) / 128.0;
+        vColor = vec4(boneMatrix[int(colIndex)]);
+        gl_Position = vec4(x, y, 0.0, 1.0);
+    }
+    '''
+
+MMD_GL.fragmentShaderScript =
   toon0:
     '''
     #ifdef GL_ES
@@ -111,5 +171,18 @@ MMD_GL.fragmentShaderScript =
 
     void main() {
         gl_FragColor = vec4(color, 1.0);
+    }
+    '''
+
+  bone0:
+    '''
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    varying vec4 vColor;
+
+    void main() {
+        gl_FragColor = vColor;
     }
     '''

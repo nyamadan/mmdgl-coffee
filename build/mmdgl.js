@@ -13,6 +13,18 @@
       getNextFloat: function() {
         f += 1.0;
         return f;
+      },
+      putsGLparam: function(pname) {
+        var pnameList, value, _i, _len;
+        pnameList = ['ACTIVE_TEXTURE', 'ALIASED_LINE_WIDTH_RANGE', 'ALIASED_POINT_SIZE_RANGE', 'ALPHA_BITS', 'ARRAY_BUFFER_BINDING', 'BLEND', 'BLEND_COLOR', 'BLEND_DST_ALPHA', 'BLEND_DST_RGB', 'BLEND_EQUATION_ALPHA', 'BLEND_EQUATION_RGB', 'BLEND_SRC_ALPHA', 'BLEND_SRC_RGB', 'BLUE_BITS', 'COLOR_CLEAR_VALUE', 'COLOR_WRITEMASK', 'COMPRESSED_TEXTURE_FORMATS', 'CULL_FACE', 'CULL_FACE_MODE', 'CURRENT_PROGRAM', 'DEPTH_BITS', 'DEPTH_CLEAR_VALUE', 'DEPTH_FUNC', 'DEPTH_RANGE', 'DEPTH_TEST', 'DEPTH_WRITEMASK', 'DITHER', 'ELEMENT_ARRAY_BUFFER_BINDING', 'FRAMEBUFFER_BINDING', 'FRONT_FACE', 'GENERATE_MIPMAP_HINT', 'GREEN_BITS', 'LINE_WIDTH', 'MAX_COMBINED_TEXTURE_IMAGE_UNITS', 'MAX_CUBE_MAP_TEXTURE_SIZE', 'MAX_FRAGMENT_UNIFORM_VECTORS', 'MAX_RENDERBUFFER_SIZE', 'MAX_TEXTURE_IMAGE_UNITS', 'MAX_TEXTURE_SIZE', 'MAX_VARYING_VECTORS', 'MAX_VERTEX_ATTRIBS', 'MAX_VERTEX_TEXTURE_IMAGE_UNITS', 'MAX_VERTEX_UNIFORM_VECTORS', 'MAX_VIEWPORT_DIMS', 'NUM_COMPRESSED_TEXTURE_FORMATS', 'PACK_ALIGNMENT', 'POLYGON_OFFSET_FACTOR', 'POLYGON_OFFSET_FILL', 'POLYGON_OFFSET_UNITS', 'RED_BITS', 'RENDERBUFFER_BINDING', 'RENDERER', 'SAMPLE_BUFFERS', 'SAMPLE_COVERAGE_INVERT', 'SAMPLE_COVERAGE_VALUE', 'SAMPLES', 'SCISSOR_BOX', 'SCISSOR_TEST', 'SHADING_LANGUAGE_VERSION', 'STENCIL_BACK_FAIL', 'STENCIL_BACK_FUNC', 'STENCIL_BACK_PASS_DEPTH_FAIL', 'STENCIL_BACK_PASS_DEPTH_PASS', 'STENCIL_BACK_REF', 'STENCIL_BACK_VALUE_MASK', 'STENCIL_BACK_WRITEMASK', 'STENCIL_BITS', 'STENCIL_CLEAR_VALUE', 'STENCIL_FAIL', 'STENCIL_FUNC', 'STENCIL_PASS_DEPTH_FAIL', 'STENCIL_PASS_DEPTH_PASS', 'STENCIL_REF', 'STENCIL_TEST', 'STENCIL_VALUE_MASK', 'STENCIL_WRITEMASK', 'SUBPIXEL_BITS', 'TEXTURE_BINDING_2D', 'TEXTURE_BINDING_CUBE_MAP', 'UNPACK_ALIGNMENT', 'UNPACK_COLORSPACE_CONVERSION_WEBGL', 'UNPACK_FLIP_Y_WEBGL', 'UNPACK_PREMULTIPLY_ALPHA_WEBGL', 'VENDOR', 'VERSION', 'VIEWPORT'];
+        if (pname != null) {
+          value = "" + pname + " : " + (gl.getParameter(gl[pname]));
+        } else {
+          for (_i = 0, _len = pnameList.length; _i < _len; _i++) {
+            pname = pnameList[_i];
+            console.log("" + pname + " : " + (gl.getParameter(gl[pname])));
+          }
+        }
       }
     };
   })();
@@ -60,12 +72,14 @@
     };
   })();
   MMD_GL.vertexShaderScript = {
-    toon0: 'uniform mat4 world;\nuniform mat4 worldViewProjection;\n\nattribute vec3 position;\nattribute vec3 normal;\nattribute vec2 coord0;\n\nvarying vec4 vPosition;\nvarying vec4 vNormal;\nvarying vec2 vCoord0;\n\nvoid main() {\n\n    vPosition = world * vec4(position, 1.0);\n\n    vNormal = vec4((world * vec4(normal + position, 1.0)).xyz - vPosition.xyz, 1.0);\n    \n    vCoord0 = coord0;\n\n    gl_Position = worldViewProjection * vec4(position, 1.0);\n}',
-    color0: 'uniform mat4 worldViewProjection;\n\nattribute vec3 position;\n\nvoid main() {\n    gl_Position = worldViewProjection * vec4(position, 1.0);\n}'
+    toon0: 'uniform mat4 world;\nuniform mat4 view;\nuniform mat4 projection;\n\nuniform sampler2D texBone;\n\nattribute vec3 position;\nattribute vec3 normal;\nattribute vec2 coord0;\n\nattribute vec2 boneIndices;\nattribute float boneWeights;\n\nvarying vec4 vPosition;\nvarying vec4 vNormal;\nvarying vec2 vCoord0;\n\nvoid main() {\n    vec4 v0; vec4 v1; vec4 v2; vec4 v3;\n    float halfSize = 1.0 / 512.0;\n    vec2 bone0 = vec2(boneIndices.x, 0.0);\n    vec2 bone1 = vec2(boneIndices.y, 0.0);\n    bone0.x = (bone0.x * 2.0 + 1.0) * halfSize;\n    bone1.x = (bone1.x * 2.0 + 1.0) * halfSize;\n    bone0.y = (bone0.y * 8.0 + 1.0) * halfSize;\n    bone1.y = (bone1.y * 8.0 + 1.0) * halfSize;\n    v0 = texture2D(texBone, vec2(bone0.x, bone0.y + 0.0 * halfSize));\n    v1 = texture2D(texBone, vec2(bone0.x, bone0.y + 2.0 * halfSize));\n    v2 = texture2D(texBone, vec2(bone0.x, bone0.y + 4.0 * halfSize));\n    v3 = texture2D(texBone, vec2(bone0.x, bone0.y + 6.0* halfSize));\n    mat4 mBone0 = mat4(v0, v1, v2, v3);\n\n    v0 = texture2D(texBone, vec2(bone1.x, bone1.y + 0.0 * halfSize));\n    v1 = texture2D(texBone, vec2(bone1.x, bone1.y + 2.0 * halfSize));\n    v2 = texture2D(texBone, vec2(bone1.x, bone1.y + 4.0 * halfSize));\n    v3 = texture2D(texBone, vec2(bone1.x, bone1.y + 6.0 * halfSize));\n    mat4 mBone1 = mat4(v0, v1, v2, v3);\n\n    mat4 mBone = mBone0 * boneWeights + mBone1 * (1.0 - boneWeights);\n\n    v0 = texture2D(texBone, vec2(bone0.x, bone0.y + 8.0 * halfSize));\n    v1 = texture2D(texBone, vec2(bone0.x, bone0.y + 10.0 * halfSize));\n    v2 = texture2D(texBone, vec2(bone0.x, bone0.y + 12.0 *  halfSize));\n    v3 = texture2D(texBone, vec2(bone0.x, bone0.y + 14.0 * halfSize));\n    mat4 mInv0 = mat4(v0, v1, v2, v3);\n\n    v0 = texture2D(texBone, vec2(bone1.x, bone1.y + 8.0 * halfSize));\n    v1 = texture2D(texBone, vec2(bone1.x, bone1.y + 10.0 * halfSize));\n    v2 = texture2D(texBone, vec2(bone1.x, bone1.y + 12.0 * halfSize));\n    v3 = texture2D(texBone, vec2(bone1.x, bone1.y + 14.0 * halfSize));\n    mat4 mInv1 = mat4(v0, v1, v2, v3);\n    mat4 mInv = mInv0 * boneWeights + mInv1 * (1.0 - boneWeights);\n\n    vPosition = world * vec4(position, 1.0);\n\n    vNormal = vec4((world * vec4(normal + position, 1.0)).xyz - vPosition.xyz, 1.0);\n    vCoord0 = coord0;\n\n    gl_Position = projection * view * world * mBone * mInv * vec4(position, 1.0);\n}',
+    color0: 'uniform mat4 world;\nuniform mat4 view;\nuniform mat4 projection;\nattribute vec3 position;\n\nvoid main() {\n    gl_Position = projection * view * world * vec4(position, 1.0);\n}',
+    bone0: 'uniform vec2 boneIndex;\nuniform mat4 boneMatrix;\n\nattribute float colIndex;\nattribute vec3 position;\n\nvarying vec4 vColor;\n\nvoid main() {\n    float x = 0.0;\n    float y = 0.0;\n    x = -1.0 + (position.x + boneIndex.x + 0.5) / 128.0;\n    y = -1.0 + (position.y + boneIndex.y * 4.0 + 0.5) / 128.0;\n    vColor = vec4(boneMatrix[int(colIndex)]);\n    gl_Position = vec4(x, y, 0.0, 1.0);\n}'
   };
   MMD_GL.fragmentShaderScript = {
     toon0: '#ifdef GL_ES\nprecision highp float;\n#endif\n\nuniform vec3 dlDirection;\nuniform vec3 dlColor;\n\nuniform vec3 color;\nuniform vec3 specular;\nuniform float shiness;\nuniform vec3 ambient;\n\nuniform sampler2D tex0;\nuniform sampler2D texToon;\n\nuniform vec3 eyeVec;\n\nvarying vec4 vPosition;\nvarying vec4 vNormal;\nvarying vec2 vCoord0;\n\nfloat saturate(float x) {\n    return max(min(x, 1.0), 0.0);\n}\n\nvoid main() {\n    float normalDotLight = saturate(dot(vNormal.xyz, -dlDirection));\n\n    vec3 spcColor = specular * pow(saturate(dot(reflect(-dlDirection, vNormal.xyz), eyeVec)), shiness);\n    vec3 ambColor = ambient;\n    vec3 tex0Color = texture2D(tex0, vCoord0).xyz;\n    vec3 texToonColor = texture2D(texToon, vec2(0.5, 1.0 - normalDotLight)).xyz;\n    vec3 dstColor = texToonColor * tex0Color * (color * dlColor + ambient * ambColor + spcColor) ;\n\n    gl_FragColor = vec4(dstColor, 1.0);\n}',
-    color0: '#ifdef GL_ES\nprecision highp float;\n#endif\n\nuniform vec3 color;\n\nvoid main() {\n    gl_FragColor = vec4(color, 1.0);\n}'
+    color0: '#ifdef GL_ES\nprecision highp float;\n#endif\n\nuniform vec3 color;\n\nvoid main() {\n    gl_FragColor = vec4(color, 1.0);\n}',
+    bone0: '#ifdef GL_ES\nprecision highp float;\n#endif\n\nvarying vec4 vColor;\n\nvoid main() {\n    gl_FragColor = vColor;\n}'
   };
   MMD_GL.Binary = (function() {
     function Binary(binStr) {
@@ -242,6 +256,35 @@
     };
     return PMDMaterial;
   })();
+  MMD_GL.bones = (function() {
+    var boneModel;
+    boneModel = null;
+    return {
+      getBoneModel: function() {
+        var colIndex, i, indices, position, program;
+        if (boneModel != null) {
+          return boneModel;
+        }
+        program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['bone0'], MMD_GL.fragmentShaderScript['bone0']);
+        if (!(program != null)) {
+          throw "*** Error compiling shader : " + tdl.programs.lastError;
+        }
+        position = new tdl.primitives.AttribBuffer(3, 4, 'Float32Array');
+        indices = new tdl.primitives.AttribBuffer(1, 4, 'Uint16Array');
+        colIndex = new tdl.primitives.AttribBuffer(1, 4, 'Float32Array');
+        for (i = 0; i < 4; i++) {
+          position.push([0, i, 0]);
+          indices.push([i]);
+          colIndex.push([i]);
+        }
+        return boneModel = new tdl.models.Model(program, {
+          position: position,
+          indices: indices,
+          colIndex: colIndex
+        }, null, gl.POINTS);
+      }
+    };
+  })();
   MMD_GL.Bone = (function() {
     function Bone() {
       this.name = '';
@@ -282,60 +325,33 @@
       this.positions = null;
       this.transformedPositions = null;
       this.bones = null;
+      this.boneFrameBuffer = null;
     }
     Mesh.prototype.transform = function() {
-      var bone0, bone0W, bone1, bone1W, boneII, d, i, j, mat, matInvPosition, matInvPosition0, matInvPosition1, matTransform, matTransform0, matTransform1, pos, posI, positionBuffer, v0, v1, v2, _ref2;
+      var bone, boneIndex, boneModel, i, matInvPosition, _len, _ref2;
       this.updateAllBoneTransform();
-      positionBuffer = this.models[0].buffers.position;
-      pos = new Float32Array(3);
-      mat = tdl.fast.matrix4.identity(new Float32Array(16));
-      matTransform = tdl.fast.matrix4.identity(new Float32Array(16));
-      matTransform0 = tdl.fast.matrix4.identity(new Float32Array(16));
-      matTransform1 = tdl.fast.matrix4.identity(new Float32Array(16));
       matInvPosition = tdl.fast.matrix4.identity(new Float32Array(16));
-      matInvPosition0 = tdl.fast.matrix4.identity(new Float32Array(16));
-      matInvPosition1 = tdl.fast.matrix4.identity(new Float32Array(16));
-      for (i = 0, _ref2 = this.positions.numElements; 0 <= _ref2 ? i < _ref2 : i > _ref2; 0 <= _ref2 ? i++ : i--) {
-        posI = i * 3;
-        boneII = i * 2;
-        bone0 = this.bones[this.boneIndices.buffer[boneII + 0]];
-        bone1 = this.bones[this.boneIndices.buffer[boneII + 1]];
-        bone0W = this.boneWeights.buffer[i];
-        bone1W = 1.0 - bone0W;
-        tdl.fast.mulScalarMatrix(matTransform0, bone0W, bone0.transform);
-        tdl.fast.mulScalarMatrix(matTransform1, bone1W, bone1.transform);
-        for (j = 0; j < 16; j++) {
-          matTransform[j] = matTransform0[j] + matTransform1[j];
-        }
-        tdl.fast.matrix4.identity(matInvPosition0);
-        tdl.fast.matrix4.identity(matInvPosition1);
-        for (j = 0; j < 3; j++) {
-          matInvPosition0[12 + j] = -bone0.pos[j];
-        }
-        for (j = 0; j < 3; j++) {
-          matInvPosition1[12 + j] = -bone1.pos[j];
-        }
-        for (j = 0; j < 16; j++) {
-          matInvPosition0[j] = matInvPosition0[j] * bone0W;
-        }
-        for (j = 0; j < 16; j++) {
-          matInvPosition1[j] = matInvPosition1[j] * bone1W;
-        }
-        for (j = 0; j < 16; j++) {
-          matInvPosition[j] = matInvPosition0[j] + matInvPosition1[j];
-        }
-        tdl.fast.matrix4.mul(mat, matInvPosition, matTransform);
-        v0 = this.positions.buffer[posI + 0];
-        v1 = this.positions.buffer[posI + 1];
-        v2 = this.positions.buffer[posI + 2];
-        d = v0 * mat[0 * 4 + 3] + v1 * mat[1 * 4 + 3] + v2 * mat[2 * 4 + 3] + mat[3 * 4 + 3];
-        pos[0] = v0 * mat[0 * 4 + 0] + v1 * mat[1 * 4 + 0] + v2 * mat[2 * 4 + 0] + mat[3 * 4 + 0];
-        pos[1] = v0 * mat[0 * 4 + 1] + v1 * mat[1 * 4 + 1] + v2 * mat[2 * 4 + 1] + mat[3 * 4 + 1];
-        pos[2] = v0 * mat[0 * 4 + 2] + v1 * mat[1 * 4 + 2] + v2 * mat[2 * 4 + 2] + mat[3 * 4 + 2];
-        this.transformedPositions.buffer.set(pos, posI);
+      boneModel = MMD_GL.bones.getBoneModel();
+      this.boneFrameBuffer.bind();
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      boneModel.drawPrep();
+      _ref2 = this.bones;
+      for (i = 0, _len = _ref2.length; i < _len; i++) {
+        bone = _ref2[i];
+        boneIndex = new Float32Array([i, 0.0]);
+        boneModel.draw({
+          boneIndex: boneIndex,
+          boneMatrix: bone.transform
+        });
+        boneIndex[1] = 1.0;
+        tdl.fast.matrix4.translation(matInvPosition, [-bone.pos[0], -bone.pos[1], -bone.pos[2]]);
+        boneModel.draw({
+          boneIndex: boneIndex,
+          boneMatrix: matInvPosition
+        });
       }
-      gl.bindBuffer(positionBuffer.target, positionBuffer.buffer());
-      return gl.bufferData(positionBuffer.target, this.transformedPositions.buffer, gl.DYNAMIC_DRAW);
+      this.boneFrameBuffer.unbind();
     };
     Mesh.prototype.updateAllBoneTransform = function() {
       var bone, _i, _len, _ref2;
@@ -378,12 +394,11 @@
         model.draw(this.materials[i]);
       }
     };
-    Mesh.prototype.drawBone = function(world, viewProjection) {
-      var bone, boneDir, boneId, boneLength, bonePos, boneTailPos, coneModel, fast, math, midPos, sphereModel, world2, worldViewProjection, x, y, z, _len, _ref2;
+    Mesh.prototype.drawBone = function(world, view, projection) {
+      var bone, boneDir, boneId, boneLength, bonePos, boneTailPos, coneModel, fast, math, midPos, sphereModel, world2, x, y, z, _i, _len, _len2, _ref2, _ref3;
       math = tdl.math;
       fast = tdl.fast;
       world2 = new Float32Array(world);
-      worldViewProjection = new Float32Array(16);
       coneModel = MMD_GL.getConeModel();
       sphereModel = MMD_GL.getSphereModel();
       coneModel.drawPrep();
@@ -406,10 +421,25 @@
         x = math.normalize(math.cross(y, z));
         world2 = math.matrix4.copy(world);
         world2 = math.matrix4.mul(new Float32Array([x[0], x[1], x[2], 0, y[0] * boneLength, y[1] * boneLength, y[2] * boneLength, 0, z[0], z[1], z[2], 0, midPos[0], midPos[1], midPos[2], 1]), world2);
-        fast.matrix4.mul(worldViewProjection, world2, viewProjection);
         coneModel.draw({
           color: new Float32Array([0.8, 0.0, 0.0]),
-          worldViewProjection: worldViewProjection
+          world: world2,
+          view: view,
+          projection: projection
+        });
+      }
+      sphereModel.drawPrep();
+      _ref3 = this.bones;
+      for (_i = 0, _len2 = _ref3.length; _i < _len2; _i++) {
+        bone = _ref3[_i];
+        world2 = tdl.math.matrix4.copy(world);
+        world2 = tdl.math.matrix4.mul(bone.transform, world2);
+        world2 = tdl.math.matrix4.mul(tdl.math.matrix4.scaling([0.5, 0.5, 0.5]), world2);
+        sphereModel.draw({
+          color: new Float32Array([0.8, 0.8, 0.8]),
+          world: world2,
+          view: view,
+          projection: projection
         });
       }
     };
@@ -428,7 +458,7 @@
       this.positions = new tdl.primitives.AttribBuffer(3, vertNum);
       this.normals = new tdl.primitives.AttribBuffer(3, vertNum);
       this.coord0s = new tdl.primitives.AttribBuffer(2, vertNum);
-      this.boneIndices = new tdl.primitives.AttribBuffer(2, vertNum, 'Uint16Array');
+      this.boneIndices = new tdl.primitives.AttribBuffer(2, vertNum, 'Float32Array');
       this.boneWeights = new tdl.primitives.AttribBuffer(1, vertNum);
       this.edgeFlags = new tdl.primitives.AttribBuffer(1, vertNum, 'Array');
       for (i = 0; 0 <= vertNum ? i < vertNum : i > vertNum; 0 <= vertNum ? i++ : i--) {
@@ -510,7 +540,7 @@
       return;
     }
     PMD.prototype.createMesh = function() {
-      var arrays, bone, coord0, i, mesh, model, normal, position, program, textures, _len, _ref2;
+      var arrays, bone, boneIndices, boneWeights, coord0, i, mesh, model, normal, position, program, textures, _len, _ref2;
       program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['toon0'], MMD_GL.fragmentShaderScript['toon0']);
       if (!(program != null)) {
         throw "*** Error compiling shader : " + tdl.programs.lastError;
@@ -522,6 +552,7 @@
       mesh.positions = this.positions;
       mesh.normals = this.normals;
       mesh.coord0s = this.coord0s;
+      mesh.boneFrameBuffer = new tdl.framebuffers.Float32Framebuffer(256, 256);
       mesh.transformedPositions = this.positions.clone();
       mesh.bones = (function() {
         var _i, _len, _ref2, _results;
@@ -536,6 +567,8 @@
       position = new tdl.buffers.Buffer(this.positions);
       normal = new tdl.buffers.Buffer(this.normals);
       coord0 = new tdl.buffers.Buffer(this.coord0s);
+      boneWeights = new tdl.buffers.Buffer(this.boneWeights);
+      boneIndices = new tdl.buffers.Buffer(this.boneIndices);
       mesh.models = new Array(this.materials.length);
       mesh.materials = new Array(this.materials.length);
       _ref2 = mesh.models;
@@ -545,16 +578,15 @@
           indices: this.indices[i]
         };
         textures = {};
-        if (this.materials[i].tex0 != null) {
-          textures.tex0 = this.materials[i].tex0;
-        }
-        if (this.materials[i].texToon != null) {
-          textures.texToon = this.materials[i].texToon;
-        }
+        textures.tex0 = this.materials[i].tex0;
+        textures.texToon = this.materials[i].texToon;
+        textures.texBone = mesh.boneFrameBuffer.texture;
         mesh.models[i] = new tdl.models.Model(program, arrays, textures);
         mesh.models[i].buffers.position = position;
         mesh.models[i].buffers.normal = normal;
         mesh.models[i].buffers.coord0 = coord0;
+        mesh.models[i].buffers.boneWeights = boneWeights;
+        mesh.models[i].buffers.boneIndices = boneIndices;
         mesh.materials[i] = this.materials[i].clone();
       }
       return mesh;

@@ -1,5 +1,5 @@
 (function() {
-  var Http, angle, canvas, coneModel, fpsTimer, gl, http, mainLoop, mesh, projection, render, view, viewProjection, world, worldViewProjection;
+  var Http, angle, canvas, coneModel, fpsTimer, gl, http, mainLoop, mesh, projection, render, start, view, viewProjection, world, worldViewProjection;
   Http = (function() {
     function Http() {}
     Http.prototype.getBinary = function(uri) {
@@ -51,6 +51,25 @@
   mesh = null;
   coneModel = null;
   angle = 0.0;
+  start = function() {
+    MMD_GL.debug.putsGLparam();
+    return Deferred.next(function() {
+      return (http.getBinary('miku.pmd')).next(function(xhr) {
+        var bin, pmd, program;
+        bin = new MMD_GL.Binary(xhr.responseText);
+        pmd = new MMD_GL.PMD(bin);
+        mesh = pmd.createMesh();
+        program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']);
+        if (!(program != null)) {
+          throw "*** Error compiling shader : " + tdl.programs.lastError;
+        }
+      });
+    }).next(function() {
+      return mainLoop();
+    }).error(function(e) {
+      return alert(e);
+    });
+  };
   mainLoop = function() {
     tdl.webgl.requestAnimationFrame(mainLoop, canvas);
     fpsTimer.now = (new Date).getTime() * 0.001;
@@ -64,7 +83,6 @@
     var prep;
     tdl.fast.matrix4.perspective(projection, tdl.math.degToRad(75), canvas.clientWidth / canvas.clientHeight, 1, 5000);
     tdl.fast.matrix4.lookAt(view, [0, 10, 20], [0, 10, 0], [0, 1, 0]);
-    tdl.fast.matrix4.mul(viewProjection, view, projection);
     gl.depthMask(true);
     gl.clearColor(0, 0, 0, 1.0);
     gl.clearDepth(1);
@@ -72,18 +90,18 @@
     gl.enable(gl.CULL_FACE);
     gl.enable(gl.DEPTH_TEST);
     tdl.fast.matrix4.rotationY(world, angle);
-    tdl.fast.matrix4.mul(worldViewProjection, world, viewProjection);
     mesh.transform();
     prep = {
       world: world,
-      worldViewProjection: worldViewProjection,
+      view: view,
+      projection: projection,
       dlColor: new Float32Array([1.0, 1.0, 1.0]),
       dlDirection: new Float32Array([0, 0, -1.0]),
       eyeVec: new Float32Array([0.0, 0.0, -1.0])
     };
     mesh.draw(prep);
     gl.disable(gl.DEPTH_TEST);
-    mesh.drawBone(world, viewProjection);
+    mesh.drawBone(world, view, projection);
     gl.enable(gl.DEPTH_TEST);
     angle += 0.01;
   };
@@ -101,22 +119,6 @@
     fpsTimer.elem = document.getElementById('fps');
     gl = tdl.webgl.setupWebGL(canvas);
     document.body.appendChild(canvas);
-    return Deferred.next(function() {
-      return (http.getBinary('miku.pmd')).next(function(xhr) {
-        var bin, pmd, program;
-        bin = new MMD_GL.Binary(xhr.responseText);
-        pmd = new MMD_GL.PMD(bin);
-        mesh = pmd.createMesh();
-        program = tdl.programs.loadProgram(MMD_GL.vertexShaderScript['color0'], MMD_GL.fragmentShaderScript['color0']);
-        if (!(program != null)) {
-          throw "*** Error compiling shader : " + tdl.programs.lastError;
-        }
-        return mainLoop();
-      });
-    }).next(function() {
-      return console.log('next operation');
-    }).error(function(e) {
-      return alert(e);
-    });
+    return start();
   });
 }).call(this);

@@ -18,6 +18,28 @@ class MMD_GL.PMDMaterial
     dst.edgeFlag = @edgeFlag
     dst
 
+MMD_GL.bones = do ->
+  boneModel = null
+
+  return {
+    getBoneModel: ->
+      return boneModel if boneModel?
+
+      program = tdl.programs.loadProgram MMD_GL.vertexShaderScript['bone0'], MMD_GL.fragmentShaderScript['bone0']
+      throw "*** Error compiling shader : #{tdl.programs.lastError}" if not program?
+
+      position = new tdl.primitives.AttribBuffer 3, 4, 'Float32Array'
+      indices = new tdl.primitives.AttribBuffer 1, 4, 'Uint16Array'
+
+      colIndex = new tdl.primitives.AttribBuffer 1, 4, 'Float32Array'
+      
+      for i in [0...4]
+        position.push [0, i, 0]
+        indices.push [i]
+        colIndex.push [i]
+      boneModel = new tdl.models.Model program, {position:position, indices:indices, colIndex:colIndex}, null, gl.POINTS
+  }
+
 class MMD_GL.Bone
   constructor: ->
     @name = ''
@@ -57,57 +79,32 @@ class MMD_GL.Mesh
     @transformedPositions = null
 
     @bones = null
+    @boneFrameBuffer = null
 
   transform: ->
     @updateAllBoneTransform()
 
-    positionBuffer = @models[0].buffers.position
-
-    pos = new Float32Array 3
-    mat = tdl.fast.matrix4.identity(new Float32Array 16)
-    matTransform = tdl.fast.matrix4.identity(new Float32Array 16)
-    matTransform0 = tdl.fast.matrix4.identity(new Float32Array 16)
-    matTransform1 = tdl.fast.matrix4.identity(new Float32Array 16)
     matInvPosition = tdl.fast.matrix4.identity(new Float32Array 16)
-    matInvPosition0 = tdl.fast.matrix4.identity(new Float32Array 16)
-    matInvPosition1 = tdl.fast.matrix4.identity(new Float32Array 16)
 
-    for i in [0...@positions.numElements]
-      posI = i * 3
-      boneII = i * 2
+    # bone frame buffer
+    boneModel = MMD_GL.bones.getBoneModel()
 
-      bone0 = @bones[@boneIndices.buffer[boneII + 0]]
-      bone1 = @bones[@boneIndices.buffer[boneII + 1]]
-      bone0W = @boneWeights.buffer[i]
-      bone1W = 1.0 - bone0W
+    # write out bones
+    @boneFrameBuffer.bind()
+    gl.clearColor 0.0, 0.0, 0.0, 1.0
+    gl.clear gl.COLOR_BUFFER_BIT
+    boneModel.drawPrep()
+    for bone, i in @bones
+      boneIndex = new Float32Array [i, 0.0]
+      boneModel.draw {boneIndex:boneIndex, boneMatrix:bone.transform}
 
-      tdl.fast.mulScalarMatrix matTransform0, bone0W, bone0.transform
-      tdl.fast.mulScalarMatrix matTransform1, bone1W, bone1.transform
-      matTransform[j] = matTransform0[j] + matTransform1[j] for j in [0...16]
+      boneIndex[1] = 1.0
+      tdl.fast.matrix4.translation matInvPosition, [-bone.pos[0], -bone.pos[1], -bone.pos[2]]
+      boneModel.draw {boneIndex:boneIndex, boneMatrix:matInvPosition}
 
-      tdl.fast.matrix4.identity matInvPosition0
-      tdl.fast.matrix4.identity matInvPosition1
-      matInvPosition0[12 + j] = -bone0.pos[j] for j in [0...3]
-      matInvPosition1[12 + j] = -bone1.pos[j] for j in [0...3]
-      matInvPosition0[j] = matInvPosition0[j] * bone0W for j in [0...16]
-      matInvPosition1[j] = matInvPosition1[j] * bone1W for j in [0...16]
-      matInvPosition[j] = matInvPosition0[j] + matInvPosition1[j] for j in [0...16]
+    @boneFrameBuffer.unbind()
 
-      tdl.fast.matrix4.mul mat, matInvPosition, matTransform
-
-      # update transformed pos
-      v0 = @positions.buffer[posI + 0]
-      v1 = @positions.buffer[posI + 1]
-      v2 = @positions.buffer[posI + 2]
-      d =  v0 * mat[0*4+3] + v1 * mat[1*4+3] + v2 * mat[2*4+3] + mat[3*4+3]
-      pos[0] = v0 * mat[0*4+0] + v1 * mat[1*4+0] + v2 * mat[2*4+0] + mat[3*4+0]
-      pos[1] = v0 * mat[0*4+1] + v1 * mat[1*4+1] + v2 * mat[2*4+1] + mat[3*4+1]
-      pos[2] = v0 * mat[0*4+2] + v1 * mat[1*4+2] + v2 * mat[2*4+2] + mat[3*4+2]
-      @transformedPositions.buffer.set pos, posI
-
-    # update position buffer
-    gl.bindBuffer positionBuffer.target, positionBuffer.buffer()
-    gl.bufferData positionBuffer.target, @transformedPositions.buffer, gl.DYNAMIC_DRAW
+    return
 
   updateAllBoneTransform: () ->
     # Debug : transform bones
@@ -148,12 +145,11 @@ class MMD_GL.Mesh
       model.draw @materials[i]
     return
 
-  drawBone: (world, viewProjection) ->
+  drawBone: (world, view, projection) ->
     math = tdl.math
     fast = tdl.fast
  
     world2 = new Float32Array world
-    worldViewProjection = new Float32Array 16
 
     coneModel = MMD_GL.getConeModel()
     sphereModel = MMD_GL.getSphereModel()
@@ -185,25 +181,26 @@ class MMD_GL.Mesh
         ]),
         world2
 
-      fast.matrix4.mul worldViewProjection, world2, viewProjection
 
       coneModel.draw {
         color : new Float32Array [0.8, 0.0, 0.0]
-        worldViewProjection : worldViewProjection
+        world : world2
+        view : view
+        projection : projection
       }
 
-#    sphereModel.drawPrep()
-#    for bone in @bones
-#      world2 = tdl.math.matrix4.copy world
-#      world2 = tdl.math.matrix4.mul bone.transform, world2
-#      world2 = tdl.math.matrix4.mul tdl.math.matrix4.scaling([0.5, 0.5, 0.5]), world2
-#
-#      tdl.fast.matrix4.mul worldViewProjection, world2, viewProjection
-#
-#      sphereModel.draw {
-#        color : new Float32Array [0.8, 0.8, 0.8]
-#        worldViewProjection : worldViewProjection
-#      }
+    sphereModel.drawPrep()
+    for bone in @bones
+      world2 = tdl.math.matrix4.copy world
+      world2 = tdl.math.matrix4.mul bone.transform, world2
+      world2 = tdl.math.matrix4.mul tdl.math.matrix4.scaling([0.5, 0.5, 0.5]), world2
+
+      sphereModel.draw {
+        color : new Float32Array [0.8, 0.8, 0.8]
+        world : world2
+        view : view
+        projection : projection 
+      }
     return
 
 class MMD_GL.PMD
@@ -227,7 +224,7 @@ class MMD_GL.PMD
     @positions = new tdl.primitives.AttribBuffer 3, vertNum
     @normals = new tdl.primitives.AttribBuffer 3, vertNum
     @coord0s = new tdl.primitives.AttribBuffer 2, vertNum
-    @boneIndices = new tdl.primitives.AttribBuffer 2, vertNum, 'Uint16Array'
+    @boneIndices = new tdl.primitives.AttribBuffer 2, vertNum, 'Float32Array'
     @boneWeights = new tdl.primitives.AttribBuffer 1, vertNum
     @edgeFlags = new tdl.primitives.AttribBuffer 1, vertNum, 'Array'
 
@@ -333,6 +330,8 @@ class MMD_GL.PMD
     mesh.normals = @normals
     mesh.coord0s = @coord0s
 
+    mesh.boneFrameBuffer = new tdl.framebuffers.Float32Framebuffer 256,256
+
     # clone of positions and bones
     mesh.transformedPositions = @positions.clone()
     mesh.bones = ( bone.clone() for bone in @bones)
@@ -341,6 +340,8 @@ class MMD_GL.PMD
     position = new tdl.buffers.Buffer @positions
     normal = new tdl.buffers.Buffer @normals
     coord0 = new tdl.buffers.Buffer @coord0s
+    boneWeights = new tdl.buffers.Buffer @boneWeights
+    boneIndices = new tdl.buffers.Buffer @boneIndices
 
     mesh.models = new Array @materials.length
     mesh.materials = new Array @materials.length
@@ -348,13 +349,16 @@ class MMD_GL.PMD
       arrays =
         indices   : @indices[i]
       textures = {}
-      textures.tex0 = @materials[i].tex0 if @materials[i].tex0?
-      textures.texToon = @materials[i].texToon if @materials[i].texToon?
+      textures.tex0 = @materials[i].tex0
+      textures.texToon = @materials[i].texToon
+      textures.texBone = mesh.boneFrameBuffer.texture
 
       mesh.models[i] = new tdl.models.Model program, arrays, textures
       mesh.models[i].buffers.position = position
       mesh.models[i].buffers.normal = normal
       mesh.models[i].buffers.coord0 = coord0
+      mesh.models[i].buffers.boneWeights = boneWeights
+      mesh.models[i].buffers.boneIndices = boneIndices
 
       mesh.materials[i] = @materials[i].clone()
     mesh
